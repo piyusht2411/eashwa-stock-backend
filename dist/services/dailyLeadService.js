@@ -66,6 +66,7 @@ const createDailyLead = (data) => __awaiter(void 0, void 0, void 0, function* ()
             nextMonthConnect: data.nextMonthConnect || 0,
             newDealers: dealerInc.newDealers || 0,
             oldDealers: dealerInc.oldDealers || 0,
+            callNotPick: data.callNotPick || 0,
         };
         entry = yield dailyLead_1.default.create(createData);
     }
@@ -104,6 +105,7 @@ const getAllDailyLeads = (...args_1) => __awaiter(void 0, [...args_1], void 0, f
                 totalNextMonthConnect: { $sum: "$nextMonthConnect" },
                 totalNewDealers: { $sum: "$newDealers" },
                 totalOldDealers: { $sum: "$oldDealers" },
+                totalCallNotPick: { $sum: "$callNotPick" },
                 count: { $sum: 1 },
             },
         },
@@ -144,6 +146,7 @@ const getDailyLeadsByUser = (userId_1, ...args_1) => __awaiter(void 0, [userId_1
                 totalNextMonthConnect: { $sum: "$nextMonthConnect" },
                 totalNewDealers: { $sum: "$newDealers" },
                 totalOldDealers: { $sum: "$oldDealers" },
+                totalCallNotPick: { $sum: "$callNotPick" },
                 count: { $sum: 1 },
             },
         },

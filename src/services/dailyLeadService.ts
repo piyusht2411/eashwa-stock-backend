@@ -54,6 +54,7 @@ export const createDailyLead = async (data: Partial<IDailyLead> & { dealerType?:
       nextMonthConnect: data.nextMonthConnect || 0,
       newDealers: dealerInc.newDealers || 0,
       oldDealers: dealerInc.oldDealers || 0,
+      callNotPick: data.callNotPick || 0,
     };
 
     entry = await DailyLead.create(createData);
@@ -102,6 +103,7 @@ export const getAllDailyLeads = async (
         totalNextMonthConnect: { $sum: "$nextMonthConnect" },
         totalNewDealers: { $sum: "$newDealers" },
         totalOldDealers: { $sum: "$oldDealers" },
+        totalCallNotPick: { $sum: "$callNotPick" },
         count: { $sum: 1 },
       },
     },
@@ -152,6 +154,7 @@ export const getDailyLeadsByUser = async (
         totalNextMonthConnect: { $sum: "$nextMonthConnect" },
         totalNewDealers: { $sum: "$newDealers" },
         totalOldDealers: { $sum: "$oldDealers" },
+        totalCallNotPick: { $sum: "$callNotPick" },
         count: { $sum: 1 },
       },
     },
