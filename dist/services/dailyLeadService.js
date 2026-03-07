@@ -50,6 +50,8 @@ const createDailyLead = (data) => __awaiter(void 0, void 0, void 0, function* ()
             update.$set.notInterestedFake = data.notInterestedFake;
         if (data.nextMonthConnect !== undefined)
             update.$set.nextMonthConnect = data.nextMonthConnect;
+        if (data.callNotPick !== undefined)
+            update.$set.callNotPick = data.callNotPick;
         if (Object.keys(dealerInc).length > 0) {
             update.$inc = dealerInc;
         }
@@ -178,6 +180,8 @@ const updateDailyLead = (id, data) => __awaiter(void 0, void 0, void 0, function
         update.$set.nextMonthConnect = data.nextMonthConnect;
     if (data.date !== undefined)
         update.$set.date = data.date;
+    if (data.callNotPick !== undefined)
+        update.$set.callNotPick = data.callNotPick;
     // Note: Updating user is not recommended, but if needed, add here
     if (Object.keys(update.$set).length === 0)
         delete update.$set;
