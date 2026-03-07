@@ -91,6 +91,7 @@ export interface IDailyLead extends Document {
   nextMonthConnect: number;
   newDealers: number;
   oldDealers: number;
+  callNotPick: number;
 }
 
 export interface mUser extends Document {

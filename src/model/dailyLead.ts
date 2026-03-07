@@ -37,6 +37,10 @@ const dailyLeadSchema = new Schema<IDailyLead>(
       type: Number,
       default: 0,
     },
+    callNotPick : {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true }
 );
