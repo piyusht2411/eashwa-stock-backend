@@ -168,9 +168,26 @@ export const getAllRequests = async (req: Request, res: Response): Promise<void>
     }
 
     // ────────────────────────────────────────────────
-    // 2. Get total count for pagination metadata
+    // 2. Get total count for pagination + status breakdown counts
+    //    (status breakdown uses date filter only, not status filter)
     // ────────────────────────────────────────────────
-    const total = await RequestModel.countDocuments(query);
+    const dateQuery = query.createdAt ? { createdAt: query.createdAt } : {};
+
+    const [total, statusAgg] = await Promise.all([
+      RequestModel.countDocuments(query),
+      RequestModel.aggregate([
+        { $match: dateQuery },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const statusCounts = { pending: 0, accepted: 0, rejected: 0, all: 0 };
+    for (const { _id, count } of statusAgg) {
+      if (_id === 'pending') statusCounts.pending = count;
+      else if (_id === 'accepted') statusCounts.accepted = count;
+      else if (_id === 'rejected') statusCounts.rejected = count;
+      statusCounts.all += count;
+    }
 
     // ────────────────────────────────────────────────
     // 3. Fetch paginated & sorted data
@@ -191,6 +208,7 @@ export const getAllRequests = async (req: Request, res: Response): Promise<void>
     res.status(200).json({
       success: true,
       data: requests,
+      statusCounts,
       pagination: {
         total,
         page: safePage,
