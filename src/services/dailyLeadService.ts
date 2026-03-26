@@ -161,8 +161,9 @@ export const getDailyLeadsByUser = async (
     },
     { $sort: { _id: -1 } },
   ]);
+  const total = await DailyLead.countDocuments(query);
 
-  return { dailyLeads, monthlyTotals };
+  return { dailyLeads, monthlyTotals, total, page, limit };
 };
 
 export const updateDailyLead = async (
@@ -189,7 +190,7 @@ export const updateDailyLead = async (
   if (data.nextMonthConnect !== undefined) update.$set.nextMonthConnect = data.nextMonthConnect;
   if (data.date !== undefined) update.$set.date = data.date;
   if (data.callNotPick !== undefined) update.$set.callNotPick = data.callNotPick;
-  
+
   // Note: Updating user is not recommended, but if needed, add here
 
   if (Object.keys(update.$set).length === 0) delete update.$set;

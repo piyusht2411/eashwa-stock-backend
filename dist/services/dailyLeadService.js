@@ -154,7 +154,8 @@ const getDailyLeadsByUser = (userId_1, ...args_1) => __awaiter(void 0, [userId_1
         },
         { $sort: { _id: -1 } },
     ]);
-    return { dailyLeads, monthlyTotals };
+    const total = yield dailyLead_1.default.countDocuments(query);
+    return { dailyLeads, monthlyTotals, total, page, limit };
 });
 exports.getDailyLeadsByUser = getDailyLeadsByUser;
 const updateDailyLead = (id, data) => __awaiter(void 0, void 0, void 0, function* () {
