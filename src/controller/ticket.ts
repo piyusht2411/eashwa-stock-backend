@@ -1,6 +1,25 @@
 import { Request, Response } from "express";
 import { createTicketService, getAllTicketsService, updateTicketStatusService } from "../services/ticketService"
 import Ticket from "../model/ticket";
+import User from "../model/user";
+import * as admin from "firebase-admin";
+
+const sendNotificationToRole = async (
+  role: "admin" | "guard",
+  title: string,
+  body: string,
+  data: Record<string, string>
+) => {
+  try {
+    const users = await User.find({ role, fcmToken: { $ne: null } }).select("fcmToken");
+    const tokens = users.map((u) => u.fcmToken!).filter(Boolean);
+    if (tokens.length === 0) return;
+    const response = await admin.messaging().sendEachForMulticast({ notification: { title, body }, data, tokens });
+    console.log(`✅ Notification sent to ${role}s | Success: ${response.successCount}, Failed: ${response.failureCount}`);
+  } catch (err) {
+    console.error(`❌ Failed to send notification to ${role}:`, err);
+  }
+};
 
 
 export const createTicket = async (req: Request, res: Response): Promise<void> => {
@@ -39,9 +58,39 @@ export const updateTicketStatus = async (req: Request, res: Response): Promise<v
       res.status(404).json({ message: "Ticket not found" });
       return;
     }
+
+    if (status === "Complete") {
+      await sendNotificationToRole(
+        "guard",
+        "🎫 Ticket Closed",
+        `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.showroomName}) has been closed.`,
+        {
+          ticketId: String(ticket._id),
+          ticketNumber: String(ticket.ticketId),
+          type: "ticket_closed",
+          status: ticket.status,
+          screen: "TicketDetail",
+        }
+      );
+    }
+
     res.json({ message: "Status updated", ticket });
   } catch (error) {
     res.status(500).json({ message: "Error updating status", error });
+  }
+};
+
+export const getTicketById = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  try {
+    const ticket = await Ticket.findById(id).populate("submittedBy", "name email");
+    if (!ticket) {
+      res.status(404).json({ message: "Ticket not found" });
+      return;
+    }
+    res.status(200).json({ success: true, data: ticket });
+  } catch (error: any) {
+    res.status(500).json({ message: "Error fetching ticket", error: error.message });
   }
 };
 
