@@ -97,25 +97,24 @@ export const getTicketsByMonthForExport = async (req: Request, res: Response): P
   try {
     const { month: monthStr, year: yearStr, status } = req.query;
 
-    if (!monthStr || !yearStr) {
-      res.status(400).json({ success: false, message: "month and year query parameters are required (e.g. ?month=3&year=2025)" });
-      return;
+    const query: any = {};
+
+    let month: number | null = null;
+    let year: number | null = null;
+
+    if (monthStr && yearStr) {
+      month = parseInt(monthStr as string);
+      year = parseInt(yearStr as string);
+
+      if (isNaN(month) || isNaN(year) || month < 1 || month > 12 || year < 2020 || year > 2030) {
+        res.status(400).json({ success: false, message: "Invalid month (1-12) or year" });
+        return;
+      }
+
+      const startOfMonth = new Date(year, month - 1, 1);
+      const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
+      query.complainDate = { $gte: startOfMonth, $lte: endOfMonth };
     }
-
-    const month = parseInt(monthStr as string);
-    const year = parseInt(yearStr as string);
-
-    if (isNaN(month) || isNaN(year) || month < 1 || month > 12 || year < 2020 || year > 2030) {
-      res.status(400).json({ success: false, message: "Invalid month (1-12) or year" });
-      return;
-    }
-
-    const startOfMonth = new Date(year, month - 1, 1);
-    const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
-
-    const query: any = {
-      complainDate: { $gte: startOfMonth, $lte: endOfMonth },
-    };
 
     if (status && ["Pending", "Complete", "Out of Warranty"].includes(status as string)) {
       query.status = status;
