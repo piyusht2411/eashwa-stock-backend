@@ -117,7 +117,7 @@ const updateRequestStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
         const updateData = { status, statusUpdatedBy: userId };
         if (status === 'rejected')
             updateData.rejectionReason = rejectionReason;
-        const updatedRequest = yield request_1.default.findByIdAndUpdate(id, updateData, { new: true });
+        const updatedRequest = yield request_1.default.findByIdAndUpdate(id, updateData, { new: true }).populate("statusUpdatedBy", "name");
         if (!updatedRequest) {
             res.status(404).json({ success: false, message: 'Request not found' });
             return;
@@ -202,7 +202,7 @@ const getAllRequests = (req, res) => __awaiter(void 0, void 0, void 0, function*
             .sort({ createdAt: -1 }) // newest first
             .skip((safePage - 1) * safeLimit)
             .limit(safeLimit)
-            .lean();
+            .populate("statusUpdatedBy", "name");
         // ────────────────────────────────────────────────
         // 4. Build response with pagination info
         // ────────────────────────────────────────────────
@@ -245,7 +245,7 @@ exports.getAllRequests = getAllRequests;
 const getRequestById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
     try {
-        const request = yield request_1.default.findById(id);
+        const request = yield request_1.default.findById(id).populate("statusUpdatedBy", "name");
         if (!request) {
             res.status(404).json({ success: false, message: 'Request not found' });
             return;
@@ -310,7 +310,7 @@ const getRequestsByMonthForExport = (req, res) => __awaiter(void 0, void 0, void
         // Fetch ALL records (no limit, no skip)
         const requests = yield request_1.default.find(query)
             .sort({ createdAt: -1 }) // newest first
-            .lean(); // faster & plain JS objects
+            .populate("statusUpdatedBy", "name");
         res.status(200).json({
             success: true,
             count: requests.length,

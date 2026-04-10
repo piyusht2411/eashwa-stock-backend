@@ -21,25 +21,45 @@ const createTicketService = (data) => __awaiter(void 0, void 0, void 0, function
 });
 exports.createTicketService = createTicketService;
 const getAllTicketsService = (filters) => __awaiter(void 0, void 0, void 0, function* () {
+    const page = parseInt(filters.page) || 1;
+    const limit = parseInt(filters.limit) || 10;
+    const skip = (page - 1) * limit;
     let query = {};
     if (filters.status) {
         query.status = filters.status;
     }
     if (filters.month) {
-        // Expect filters.month in YYYY-MM format
         const [year, month] = filters.month.split("-");
         const start = new Date(parseInt(year), parseInt(month) - 1, 1);
         const end = new Date(parseInt(year), parseInt(month), 1);
         query.complainDate = { $gte: start, $lt: end };
     }
-    return ticket_1.default.find(query)
-        .sort({ complainDate: -1 })
-        .populate("submittedBy", "name email");
+    const [tickets, total] = yield Promise.all([
+        ticket_1.default.find(query)
+            .sort({ complainDate: -1 })
+            .skip(skip)
+            .limit(limit)
+            .populate("submittedBy", "name email"),
+        ticket_1.default.countDocuments(query),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    return {
+        tickets,
+        count: tickets.length,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages,
+            hasNextPage: page < totalPages,
+            hasPrevPage: page > 1,
+        },
+    };
 });
 exports.getAllTicketsService = getAllTicketsService;
 const updateTicketStatusService = (id, status, statusRemark) => __awaiter(void 0, void 0, void 0, function* () {
     const update = { status };
-    if (status === "Pending" && statusRemark) {
+    if (statusRemark) {
         update.statusRemark = statusRemark;
     }
     else {

@@ -40,9 +40,8 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
 
 export const getTickets = async (req: Request, res: Response): Promise<void> => {
   try {
-    const filters = req.query;
-    const tickets = await getAllTicketsService(filters);
-    res.json(tickets);
+    const result = await getAllTicketsService(req.query);
+    res.json({ message: "Tickets fetched successfully", ...result });
   } catch (error) {
     res.status(500).json({ message: "Error fetching tickets", error });
   }
@@ -52,7 +51,6 @@ export const updateTicketStatus = async (req: Request, res: Response): Promise<v
   try {
     const { id } = req.params;
     const { status, statusRemark } = req.body;
-    // Add role check if needed, e.g., if (req.user.role !== 'admin' && req.user.post !== 'service') return unauthorized
     const ticket = await updateTicketStatusService(id, status, statusRemark);
     if (!ticket) {
       res.status(404).json({ message: "Ticket not found" });

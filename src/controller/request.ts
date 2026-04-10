@@ -102,7 +102,7 @@ export const updateRequestStatus = async (req: Request, res: Response): Promise<
     const updateData: any = { status, statusUpdatedBy: userId };
     if (status === 'rejected') updateData.rejectionReason = rejectionReason;
 
-    const updatedRequest = await RequestModel.findByIdAndUpdate(id, updateData, { new: true });
+    const updatedRequest = await RequestModel.findByIdAndUpdate(id, updateData, { new: true }).populate("statusUpdatedBy", "name");
 
     if (!updatedRequest) {
       res.status(404).json({ success: false, message: 'Request not found' });
@@ -202,7 +202,7 @@ export const getAllRequests = async (req: Request, res: Response): Promise<void>
       .sort({ createdAt: -1 })           // newest first
       .skip((safePage - 1) * safeLimit)
       .limit(safeLimit)
-      .lean();
+      .populate("statusUpdatedBy", "name");
 
     // ────────────────────────────────────────────────
     // 4. Build response with pagination info
@@ -247,7 +247,7 @@ export const getRequestById = async (req: Request, res: Response): Promise<void>
   const { id } = req.params;
 
   try {
-    const request = await RequestModel.findById(id);
+    const request = await RequestModel.findById(id).populate("statusUpdatedBy", "name");
 
     if (!request) {
       res.status(404).json({ success: false, message: 'Request not found' });
@@ -325,7 +325,7 @@ export const getRequestsByMonthForExport = async (
     // Fetch ALL records (no limit, no skip)
     const requests = await RequestModel.find(query)
       .sort({ createdAt: -1 })   // newest first
-      .lean();                   // faster & plain JS objects
+      .populate("statusUpdatedBy", "name");
 
     res.status(200).json({
       success: true,

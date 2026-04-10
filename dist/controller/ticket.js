@@ -73,9 +73,8 @@ const createTicket = (req, res) => __awaiter(void 0, void 0, void 0, function* (
 exports.createTicket = createTicket;
 const getTickets = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const filters = req.query;
-        const tickets = yield (0, ticketService_1.getAllTicketsService)(filters);
-        res.json(tickets);
+        const result = yield (0, ticketService_1.getAllTicketsService)(req.query);
+        res.json(Object.assign({ message: "Tickets fetched successfully" }, result));
     }
     catch (error) {
         res.status(500).json({ message: "Error fetching tickets", error });
@@ -86,7 +85,6 @@ const updateTicketStatus = (req, res) => __awaiter(void 0, void 0, void 0, funct
     try {
         const { id } = req.params;
         const { status, statusRemark } = req.body;
-        // Add role check if needed, e.g., if (req.user.role !== 'admin' && req.user.post !== 'service') return unauthorized
         const ticket = yield (0, ticketService_1.updateTicketStatusService)(id, status, statusRemark);
         if (!ticket) {
             res.status(404).json({ message: "Ticket not found" });
