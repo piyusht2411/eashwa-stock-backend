@@ -35,7 +35,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMyTickets = exports.getTicketById = exports.updateTicketStatus = exports.getTickets = exports.createTicket = void 0;
+exports.getMyTickets = exports.getTicketById = exports.getTicketsByMonthForExport = exports.updateTicketStatus = exports.getTickets = exports.createTicket = void 0;
 const ticketService_1 = require("../services/ticketService");
 const ticket_1 = __importDefault(require("../model/ticket"));
 const user_1 = __importDefault(require("../model/user"));
@@ -120,6 +120,44 @@ const updateTicketStatus = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.updateTicketStatus = updateTicketStatus;
+const getTicketsByMonthForExport = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { month: monthStr, year: yearStr, status } = req.query;
+        if (!monthStr || !yearStr) {
+            res.status(400).json({ success: false, message: "month and year query parameters are required (e.g. ?month=3&year=2025)" });
+            return;
+        }
+        const month = parseInt(monthStr);
+        const year = parseInt(yearStr);
+        if (isNaN(month) || isNaN(year) || month < 1 || month > 12 || year < 2020 || year > 2030) {
+            res.status(400).json({ success: false, message: "Invalid month (1-12) or year" });
+            return;
+        }
+        const startOfMonth = new Date(year, month - 1, 1);
+        const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
+        const query = {
+            complainDate: { $gte: startOfMonth, $lte: endOfMonth },
+        };
+        if (status && ["Pending", "Complete", "Out of Warranty"].includes(status)) {
+            query.status = status;
+        }
+        const tickets = yield ticket_1.default.find(query)
+            .sort({ complainDate: -1 })
+            .populate("submittedBy", "name email");
+        res.status(200).json({
+            success: true,
+            count: tickets.length,
+            month,
+            year,
+            status: status || "all",
+            data: tickets,
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch tickets for export", error: error.message });
+    }
+});
+exports.getTicketsByMonthForExport = getTicketsByMonthForExport;
 const getTicketById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
     try {

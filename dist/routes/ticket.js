@@ -10,6 +10,7 @@ const router = express_1.default.Router();
 router.post("/create", authMiddleware_1.authenticateToken, ticket_1.createTicket);
 router.get("/", authMiddleware_1.authenticateToken, ticket_1.getTickets);
 router.get("/my-ticket", authMiddleware_1.authenticateToken, ticket_1.getMyTickets);
+router.get("/export-by-month", authMiddleware_1.authenticateToken, ticket_1.getTicketsByMonthForExport);
 router.get("/:id", authMiddleware_1.authenticateToken, ticket_1.getTicketById);
 router.patch("/:id/status", authMiddleware_1.authenticateToken, ticket_1.updateTicketStatus);
 exports.default = router;

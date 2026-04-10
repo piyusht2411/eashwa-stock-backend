@@ -93,6 +93,51 @@ export const updateTicketStatus = async (req: Request, res: Response): Promise<v
   }
 };
 
+export const getTicketsByMonthForExport = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { month: monthStr, year: yearStr, status } = req.query;
+
+    if (!monthStr || !yearStr) {
+      res.status(400).json({ success: false, message: "month and year query parameters are required (e.g. ?month=3&year=2025)" });
+      return;
+    }
+
+    const month = parseInt(monthStr as string);
+    const year = parseInt(yearStr as string);
+
+    if (isNaN(month) || isNaN(year) || month < 1 || month > 12 || year < 2020 || year > 2030) {
+      res.status(400).json({ success: false, message: "Invalid month (1-12) or year" });
+      return;
+    }
+
+    const startOfMonth = new Date(year, month - 1, 1);
+    const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const query: any = {
+      complainDate: { $gte: startOfMonth, $lte: endOfMonth },
+    };
+
+    if (status && ["Pending", "Complete", "Out of Warranty"].includes(status as string)) {
+      query.status = status;
+    }
+
+    const tickets = await Ticket.find(query)
+      .sort({ complainDate: -1 })
+      .populate("submittedBy", "name email");
+
+    res.status(200).json({
+      success: true,
+      count: tickets.length,
+      month,
+      year,
+      status: status || "all",
+      data: tickets,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: "Failed to fetch tickets for export", error: error.message });
+  }
+};
+
 export const getTicketById = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
   try {
