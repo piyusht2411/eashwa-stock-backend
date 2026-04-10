@@ -62,12 +62,27 @@ export const updateTicketStatus = async (req: Request, res: Response): Promise<v
     if (status === "Complete") {
       await sendNotificationToRole(
         "guard",
-        "🎫 Ticket Closed",
-        `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.showroomName}) has been closed.`,
+        "✅ Ticket Resolved",
+        `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.showroomName}) has been resolved.`,
         {
           ticketId: String(ticket._id),
           ticketNumber: String(ticket.ticketId),
           type: "ticket_closed",
+          status: ticket.status,
+          screen: "TicketDetail",
+        }
+      );
+    }
+
+    if (status === "Out of Warranty") {
+      await sendNotificationToRole(
+        "guard",
+        "❌ Ticket Out of Warranty",
+        `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.showroomName}) is out of warranty.`,
+        {
+          ticketId: String(ticket._id),
+          ticketNumber: String(ticket.ticketId),
+          type: "ticket_out_of_warranty",
           status: ticket.status,
           screen: "TicketDetail",
         }
