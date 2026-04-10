@@ -101,15 +101,20 @@ const updateTicketStatus = (req, res) => __awaiter(void 0, void 0, void 0, funct
                 screen: "TicketDetail",
             });
         }
-        if (status === "Out of Warranty") {
-            yield sendNotificationToRole("guard", "❌ Ticket Out of Warranty", `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.showroomName}) is out of warranty.`, {
-                ticketId: String(ticket._id),
-                ticketNumber: String(ticket.ticketId),
-                type: "ticket_out_of_warranty",
-                status: ticket.status,
-                screen: "TicketDetail",
-            });
-        }
+        // if (status === "Out of Warranty") {
+        //   await sendNotificationToRole(
+        //     "guard",
+        //     "❌ Ticket Out of Warranty",
+        //     `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.showroomName}) is out of warranty.`,
+        //     {
+        //       ticketId: String(ticket._id),
+        //       ticketNumber: String(ticket.ticketId),
+        //       type: "ticket_out_of_warranty",
+        //       status: ticket.status,
+        //       screen: "TicketDetail",
+        //     }
+        //   );
+        // }
         res.json({ message: "Status updated", ticket });
     }
     catch (error) {

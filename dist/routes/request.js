@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const request_1 = require("../controller/request");
+const authMiddleware_1 = require("../middleware/authMiddleware");
 const router = (0, express_1.Router)();
 // ────────────────────────────────────────────────
 //  Specific (non-parameter) routes FIRST
@@ -12,6 +13,6 @@ router.get('/', request_1.getAllRequests);
 // ────────────────────────────────────────────────
 //  Parameterized routes AFTER all static routes
 // ────────────────────────────────────────────────
-router.put('/:id/status', request_1.updateRequestStatus);
+router.put('/:id/status', authMiddleware_1.authenticateToken, request_1.updateRequestStatus);
 router.get('/:id', request_1.getRequestById);
 exports.default = router;

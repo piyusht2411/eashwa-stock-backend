@@ -6,6 +6,7 @@ import {
   getRequestById,
   getRequestsByMonthForExport,
 } from '../controller/request';
+import { authenticateToken } from '../middleware/authMiddleware';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.get('/', getAllRequests);
 // ────────────────────────────────────────────────
 //  Parameterized routes AFTER all static routes
 // ────────────────────────────────────────────────
-router.put('/:id/status', updateRequestStatus);
+router.put('/:id/status', authenticateToken ,updateRequestStatus);
 router.get('/:id', getRequestById);
 
 export default router;
