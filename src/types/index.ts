@@ -214,6 +214,7 @@ export interface IRequest extends Document {
   amount: number;
   time: string;
   status: 'pending' | 'accepted' | 'rejected';
+  statusUpdatedBy?: Types.ObjectId;
   rejectionReason?: string;
   createdAt: Date;
   updatedAt: Date;

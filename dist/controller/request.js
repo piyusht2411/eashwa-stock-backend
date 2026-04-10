@@ -100,6 +100,11 @@ exports.submitRequest = submitRequest;
 const updateRequestStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
     const { status, rejectionReason } = req.body;
+    const userId = req.userId;
+    if (!userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized: Admin login required' });
+        return;
+    }
     if (!['accepted', 'rejected'].includes(status)) {
         res.status(400).json({ success: false, message: "Status must be 'accepted' or 'rejected'" });
         return;
@@ -109,7 +114,7 @@ const updateRequestStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
         return;
     }
     try {
-        const updateData = { status };
+        const updateData = { status, statusUpdatedBy: userId };
         if (status === 'rejected')
             updateData.rejectionReason = rejectionReason;
         const updatedRequest = yield request_1.default.findByIdAndUpdate(id, updateData, { new: true });

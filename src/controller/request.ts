@@ -82,6 +82,12 @@ export const submitRequest = async (req: Request, res: Response): Promise<void> 
 export const updateRequestStatus = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
   const { status, rejectionReason } = req.body;
+  const userId = req.userId;
+
+  if (!userId) {
+    res.status(401).json({ success: false, message: 'Unauthorized: Admin login required' });
+    return;
+  }
 
   if (!['accepted', 'rejected'].includes(status)) {
     res.status(400).json({ success: false, message: "Status must be 'accepted' or 'rejected'" });
@@ -93,7 +99,7 @@ export const updateRequestStatus = async (req: Request, res: Response): Promise<
   }
 
   try {
-    const updateData: any = { status };
+    const updateData: any = { status, statusUpdatedBy: userId };
     if (status === 'rejected') updateData.rejectionReason = rejectionReason;
 
     const updatedRequest = await RequestModel.findByIdAndUpdate(id, updateData, { new: true });

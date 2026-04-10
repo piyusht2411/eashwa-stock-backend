@@ -13,6 +13,10 @@ const requestSchema = new mongoose_1.Schema({
         enum: ['pending', 'accepted', 'rejected'],
         default: 'pending',
     },
+    statusUpdatedBy: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'User',
+    },
     rejectionReason: { type: String, trim: true },
 }, { timestamps: true });
 const Request = (0, mongoose_1.model)('Request', requestSchema);

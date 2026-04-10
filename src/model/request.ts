@@ -14,6 +14,10 @@ const requestSchema = new Schema<IRequest>(
       enum: ['pending', 'accepted', 'rejected'],
       default: 'pending',
     },
+    statusUpdatedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+    },
     rejectionReason: { type: String, trim: true },
   },
   { timestamps: true }
