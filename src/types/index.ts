@@ -1,5 +1,13 @@
 import { Document, Types } from "mongoose";
 
+export interface IDealer extends Document {
+  name: string;
+  phone?: string;
+  location?: string;
+  showroomName?: string;
+  isActive: boolean;
+}
+
 export type Role = "admin" | "employee" | "hr" | "manager" | "admin-plant" | "guard";
 
 export interface TargetAchieved {
@@ -183,20 +191,28 @@ export interface IOrder extends Document {
   remarkInputSid?: String;
 }
 
+export interface IComponentDetail {
+  code?: string;
+  serialNumber?: string;
+}
+
 export interface ITicket extends Document {
   ticketId: number;
-  dealerName: string;
-  dealerPhone: string;
+  dealer: Types.ObjectId;          // ref to Dealer
+  dealerName: string;              // denormalized for display
   location: string;
-  showroomName: string;
   agentName: string;
-  agentPhone: string;
-  complaintRegarding: string[];
+  complaintRegarding: string[];    // ["Battery", "Charger", "Motor", "Controller"]
+  battery?: IComponentDetail;
+  charger?: IComponentDetail;
+  motor?: IComponentDetail;
+  controller?: IComponentDetail;
+  type: "Replacement" | "Short" | "Bill";
+  problemDescription?: string;
   purchaseDate: Date;
   complainDate: Date;
-  warrantyStatus: "In Warranty" | "Out of Warranty" | "Dispatch Problem";
-  remark: string;
   status: "Pending" | "Complete" | "Out of Warranty";
+  warrantyStatus?: "In Warranty" | "Out of Warranty";  // set by admin on update
   statusRemark?: string;
   submittedBy: Types.ObjectId;
 }

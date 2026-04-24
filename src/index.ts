@@ -12,6 +12,7 @@ import imageRouter from "./routes/image";
 import orderRoutes from "./routes/order";
 import ticketRoutes from "./routes/ticket";
 import dailyLeadRoutes from "./routes/dailyLeads";
+import dealerRoutes from "./routes/dealer";
 import morgan from "morgan";
 import * as admin from "firebase-admin";
 
@@ -73,6 +74,7 @@ app.use("/api/images", imageRouter);
 app.use("/api/orders", orderRoutes);
 app.use("/api/tickets", ticketRoutes);
 app.use("/api/daily-leads", dailyLeadRoutes)
+app.use("/api/dealers", dealerRoutes)
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   res.status(500).json({ message: err.message });
 });

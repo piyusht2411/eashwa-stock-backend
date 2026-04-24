@@ -50,8 +50,15 @@ export const getTickets = async (req: Request, res: Response): Promise<void> => 
 export const updateTicketStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { status, statusRemark } = req.body;
-    const ticket = await updateTicketStatusService(id, status, statusRemark);
+    const { status, warrantyStatus, statusRemark } = req.body;
+
+    // Remark is required when closing as Out of Warranty
+    if (warrantyStatus === "Out of Warranty" && !statusRemark?.trim()) {
+      res.status(400).json({ message: "Status remark is required when setting Out of Warranty" });
+      return;
+    }
+
+    const ticket = await updateTicketStatusService(id, status, warrantyStatus, statusRemark);
     if (!ticket) {
       res.status(404).json({ message: "Ticket not found" });
       return;
@@ -61,7 +68,7 @@ export const updateTicketStatus = async (req: Request, res: Response): Promise<v
       await sendNotificationToRole(
         "guard",
         "✅ Ticket Resolved",
-        `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.showroomName}) has been resolved.`,
+        `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.location}) has been resolved.`,
         {
           ticketId: String(ticket._id),
           ticketNumber: String(ticket.ticketId),
@@ -140,7 +147,9 @@ export const getTicketsByMonthForExport = async (req: Request, res: Response): P
 export const getTicketById = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
   try {
-    const ticket = await Ticket.findById(id).populate("submittedBy", "name email");
+    const ticket = await Ticket.findById(id)
+      .populate("submittedBy", "name email")
+      .populate("dealer", "name phone location");
     if (!ticket) {
       res.status(404).json({ message: "Ticket not found" });
       return;
@@ -175,7 +184,8 @@ export const getMyTickets = async (req: Request, res: Response): Promise<void> =
 
     const tickets = await Ticket.find(query)
       .sort({ complainDate: -1 })
-      .populate("submittedBy", "name email");
+      .populate("submittedBy", "name email")
+      .populate("dealer", "name phone location");
 
     res.status(200).json({
       message: "My tickets fetched successfully",

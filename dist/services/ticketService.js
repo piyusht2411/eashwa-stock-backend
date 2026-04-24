@@ -34,12 +34,19 @@ const getAllTicketsService = (filters) => __awaiter(void 0, void 0, void 0, func
         const end = new Date(parseInt(year), parseInt(month), 1);
         query.complainDate = { $gte: start, $lt: end };
     }
+    if (filters.dealerId) {
+        query.dealer = filters.dealerId;
+    }
+    if (filters.type) {
+        query.type = filters.type;
+    }
     const [tickets, total] = yield Promise.all([
         ticket_1.default.find(query)
             .sort({ complainDate: -1 })
             .skip(skip)
             .limit(limit)
-            .populate("submittedBy", "name email"),
+            .populate("submittedBy", "name email")
+            .populate("dealer", "name phone location"),
         ticket_1.default.countDocuments(query),
     ]);
     const totalPages = Math.ceil(total / limit);
@@ -57,14 +64,17 @@ const getAllTicketsService = (filters) => __awaiter(void 0, void 0, void 0, func
     };
 });
 exports.getAllTicketsService = getAllTicketsService;
-const updateTicketStatusService = (id, status, statusRemark) => __awaiter(void 0, void 0, void 0, function* () {
+const updateTicketStatusService = (id, status, warrantyStatus, statusRemark) => __awaiter(void 0, void 0, void 0, function* () {
     const update = { status };
+    if (warrantyStatus) {
+        update.warrantyStatus = warrantyStatus;
+    }
     if (statusRemark) {
         update.statusRemark = statusRemark;
     }
     else {
         update.statusRemark = undefined;
     }
-    return ticket_1.default.findByIdAndUpdate(id, update, { new: true });
+    return ticket_1.default.findByIdAndUpdate(id, update, { new: true }).populate("dealer", "name phone location");
 });
 exports.updateTicketStatusService = updateTicketStatusService;

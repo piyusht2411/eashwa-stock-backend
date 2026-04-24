@@ -50,6 +50,7 @@ const image_1 = __importDefault(require("./routes/image"));
 const order_1 = __importDefault(require("./routes/order"));
 const ticket_1 = __importDefault(require("./routes/ticket"));
 const dailyLeads_1 = __importDefault(require("./routes/dailyLeads"));
+const dealer_1 = __importDefault(require("./routes/dealer"));
 const morgan_1 = __importDefault(require("morgan"));
 const admin = __importStar(require("firebase-admin"));
 dotenv_1.default.config();
@@ -96,6 +97,7 @@ app.use("/api/images", image_1.default);
 app.use("/api/orders", order_1.default);
 app.use("/api/tickets", ticket_1.default);
 app.use("/api/daily-leads", dailyLeads_1.default);
+app.use("/api/dealers", dealer_1.default);
 app.use((err, req, res, next) => {
     res.status(500).json({ message: err.message });
 });

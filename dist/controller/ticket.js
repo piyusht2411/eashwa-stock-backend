@@ -84,14 +84,19 @@ exports.getTickets = getTickets;
 const updateTicketStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        const { status, statusRemark } = req.body;
-        const ticket = yield (0, ticketService_1.updateTicketStatusService)(id, status, statusRemark);
+        const { status, warrantyStatus, statusRemark } = req.body;
+        // Remark is required when closing as Out of Warranty
+        if (warrantyStatus === "Out of Warranty" && !(statusRemark === null || statusRemark === void 0 ? void 0 : statusRemark.trim())) {
+            res.status(400).json({ message: "Status remark is required when setting Out of Warranty" });
+            return;
+        }
+        const ticket = yield (0, ticketService_1.updateTicketStatusService)(id, status, warrantyStatus, statusRemark);
         if (!ticket) {
             res.status(404).json({ message: "Ticket not found" });
             return;
         }
         if (status === "Complete") {
-            yield sendNotificationToRole("guard", "✅ Ticket Resolved", `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.showroomName}) has been resolved.`, {
+            yield sendNotificationToRole("guard", "✅ Ticket Resolved", `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.location}) has been resolved.`, {
                 ticketId: String(ticket._id),
                 ticketNumber: String(ticket.ticketId),
                 type: "ticket_closed",
@@ -160,7 +165,9 @@ exports.getTicketsByMonthForExport = getTicketsByMonthForExport;
 const getTicketById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
     try {
-        const ticket = yield ticket_1.default.findById(id).populate("submittedBy", "name email");
+        const ticket = yield ticket_1.default.findById(id)
+            .populate("submittedBy", "name email")
+            .populate("dealer", "name phone location");
         if (!ticket) {
             res.status(404).json({ message: "Ticket not found" });
             return;
@@ -191,7 +198,8 @@ const getMyTickets = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         }
         const tickets = yield ticket_1.default.find(query)
             .sort({ complainDate: -1 })
-            .populate("submittedBy", "name email");
+            .populate("submittedBy", "name email")
+            .populate("dealer", "name phone location");
         res.status(200).json({
             message: "My tickets fetched successfully",
             count: tickets.length,
