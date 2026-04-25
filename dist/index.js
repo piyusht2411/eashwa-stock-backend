@@ -80,7 +80,8 @@ var corsOptions = {
         "http://localhost:3000",
         "https://eashwa-frontend-iptp.vercel.app",
         "https://eashwastock.in",
-        "https://www.eashwastock.in"
+        "https://www.eashwastock.in",
+        "https://dummy-phi-eight.vercel.app"
     ],
     credentials: true,
 };
