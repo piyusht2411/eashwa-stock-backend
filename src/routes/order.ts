@@ -8,6 +8,7 @@ import {
   getDispatchOrders,
   getMyOrders,
   getOrderById,
+  getOrdersByMonthForExport,
   markCancel,
   markPending,
   submitOrder,
@@ -54,6 +55,7 @@ router.get(
   getAllOrders
 );
 
+router.get("/export-by-month", authenticateToken, getOrdersByMonthForExport);
 router.post("/submit", authenticateToken, submitOrder);
 router.patch("/priority/:id", authenticateToken, updateOrderPriority);
 router.get("/dispatch", authenticateToken, getDispatchOrders);

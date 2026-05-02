@@ -31,6 +31,7 @@ router.get("/my-orders", authMiddleware_1.authenticateToken, validation_1.getMyO
  * @queryParam {string} [sortBy] - Sort by pending_first, delivered_first, or latest
  */
 router.get("/all-orders", authMiddleware_1.authenticateToken, validation_1.getMyOrdersValidation, validateRequest_1.validateRequest, order_1.getAllOrders);
+router.get("/export-by-month", authMiddleware_1.authenticateToken, order_1.getOrdersByMonthForExport);
 router.post("/submit", authMiddleware_1.authenticateToken, order_1.submitOrder);
 router.patch("/priority/:id", authMiddleware_1.authenticateToken, order_1.updateOrderPriority);
 router.get("/dispatch", authMiddleware_1.authenticateToken, order_1.getDispatchOrders);

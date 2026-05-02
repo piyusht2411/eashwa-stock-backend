@@ -448,6 +448,60 @@ export const deleteOrder = async (req: Request, res: Response) => {
   }
 };
 
+export const getOrdersByMonthForExport = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { month: monthStr, year: yearStr, status } = req.query;
+
+    const query: any = {};
+
+    let month: number | null = null;
+    let year: number | null = null;
+
+    if (monthStr && yearStr) {
+      month = parseInt(monthStr as string);
+      year = parseInt(yearStr as string);
+
+      if (isNaN(month) || isNaN(year) || month < 1 || month > 12 || year < 2020 || year > 2030) {
+        res.status(400).json({ success: false, message: "Invalid month (1-12) or year" });
+        return;
+      }
+
+      const startOfMonth = new Date(year, month - 1, 1);
+      const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
+      query.createdAt = { $gte: startOfMonth, $lte: endOfMonth };
+    }
+
+    const validStatuses = [
+      "pending_verification",
+      "payment_received",
+      "payment_not_received",
+      "ready_for_dispatch",
+      "pending",
+      "cancelled",
+      "completed",
+    ];
+
+    if (status && validStatuses.includes(status as string)) {
+      query.status = status;
+    }
+
+    const orders = await Order.find(query)
+      .sort({ createdAt: -1 })
+      .populate("submittedBy", "name email");
+
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      month,
+      year,
+      status: status || "all",
+      data: orders,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: "Failed to fetch orders for export", error: error.message });
+  }
+};
+
 // GET Order by ID
 export const getOrderById = async (
   req: Request,

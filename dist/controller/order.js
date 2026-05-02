@@ -35,7 +35,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOrderById = exports.deleteOrder = exports.updateOrder = exports.updateOrderPriority = exports.getDispatchOrders = exports.getAllOrders = exports.getMyOrders = exports.markCancel = exports.markPending = exports.deliverOrder = exports.submitOrder = void 0;
+exports.getOrderById = exports.getOrdersByMonthForExport = exports.deleteOrder = exports.updateOrder = exports.updateOrderPriority = exports.getDispatchOrders = exports.getAllOrders = exports.getMyOrders = exports.markCancel = exports.markPending = exports.deliverOrder = exports.submitOrder = void 0;
 const orderService = __importStar(require("../services/orderService"));
 const notificationService = __importStar(require("../services/notificationService"));
 const order_1 = __importDefault(require("../model/order"));
@@ -396,6 +396,52 @@ const deleteOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.deleteOrder = deleteOrder;
+const getOrdersByMonthForExport = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { month: monthStr, year: yearStr, status } = req.query;
+        const query = {};
+        let month = null;
+        let year = null;
+        if (monthStr && yearStr) {
+            month = parseInt(monthStr);
+            year = parseInt(yearStr);
+            if (isNaN(month) || isNaN(year) || month < 1 || month > 12 || year < 2020 || year > 2030) {
+                res.status(400).json({ success: false, message: "Invalid month (1-12) or year" });
+                return;
+            }
+            const startOfMonth = new Date(year, month - 1, 1);
+            const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
+            query.createdAt = { $gte: startOfMonth, $lte: endOfMonth };
+        }
+        const validStatuses = [
+            "pending_verification",
+            "payment_received",
+            "payment_not_received",
+            "ready_for_dispatch",
+            "pending",
+            "cancelled",
+            "completed",
+        ];
+        if (status && validStatuses.includes(status)) {
+            query.status = status;
+        }
+        const orders = yield order_1.default.find(query)
+            .sort({ createdAt: -1 })
+            .populate("submittedBy", "name email");
+        res.status(200).json({
+            success: true,
+            count: orders.length,
+            month,
+            year,
+            status: status || "all",
+            data: orders,
+        });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch orders for export", error: error.message });
+    }
+});
+exports.getOrdersByMonthForExport = getOrdersByMonthForExport;
 // GET Order by ID
 const getOrderById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c;
