@@ -160,6 +160,38 @@ export const getTicketById = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+export const updateTicket = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const allowedFields = [
+      "dealerName", "location", "agentName", "complaintRegarding",
+      "battery", "charger", "motor", "controller", "type",
+      "problemDescription", "purchaseDate", "complainDate",
+      "status", "warrantyStatus", "statusRemark",
+    ];
+    const update: any = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        update[field] = req.body[field];
+      }
+    }
+    if (update.warrantyStatus === "") update.warrantyStatus = null;
+    if (update.statusRemark === "") update.statusRemark = undefined;
+
+    const ticket = await Ticket.findByIdAndUpdate(id, update, { new: true })
+      .populate("submittedBy", "name email")
+      .populate("dealer", "name phone location");
+
+    if (!ticket) {
+      res.status(404).json({ message: "Ticket not found" });
+      return;
+    }
+    res.json({ message: "Ticket updated", ticket });
+  } catch (error) {
+    res.status(500).json({ message: "Error updating ticket", error });
+  }
+};
+
 export const getMyTickets = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!req.userId) {

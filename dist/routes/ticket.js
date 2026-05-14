@@ -13,4 +13,5 @@ router.get("/my-ticket", authMiddleware_1.authenticateToken, ticket_1.getMyTicke
 router.get("/export-by-month", authMiddleware_1.authenticateToken, ticket_1.getTicketsByMonthForExport);
 router.get("/:id", authMiddleware_1.authenticateToken, ticket_1.getTicketById);
 router.patch("/:id/status", authMiddleware_1.authenticateToken, ticket_1.updateTicketStatus);
+router.patch("/:id", authMiddleware_1.authenticateToken, ticket_1.updateTicket);
 exports.default = router;

@@ -35,7 +35,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMyTickets = exports.getTicketById = exports.getTicketsByMonthForExport = exports.updateTicketStatus = exports.getTickets = exports.createTicket = void 0;
+exports.getMyTickets = exports.updateTicket = exports.getTicketById = exports.getTicketsByMonthForExport = exports.updateTicketStatus = exports.getTickets = exports.createTicket = void 0;
 const ticketService_1 = require("../services/ticketService");
 const ticket_1 = __importDefault(require("../model/ticket"));
 const user_1 = __importDefault(require("../model/user"));
@@ -179,6 +179,39 @@ const getTicketById = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.getTicketById = getTicketById;
+const updateTicket = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        const allowedFields = [
+            "dealerName", "location", "agentName", "complaintRegarding",
+            "battery", "charger", "motor", "controller", "type",
+            "problemDescription", "purchaseDate", "complainDate",
+            "status", "warrantyStatus", "statusRemark",
+        ];
+        const update = {};
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                update[field] = req.body[field];
+            }
+        }
+        if (update.warrantyStatus === "")
+            update.warrantyStatus = null;
+        if (update.statusRemark === "")
+            update.statusRemark = undefined;
+        const ticket = yield ticket_1.default.findByIdAndUpdate(id, update, { new: true })
+            .populate("submittedBy", "name email")
+            .populate("dealer", "name phone location");
+        if (!ticket) {
+            res.status(404).json({ message: "Ticket not found" });
+            return;
+        }
+        res.json({ message: "Ticket updated", ticket });
+    }
+    catch (error) {
+        res.status(500).json({ message: "Error updating ticket", error });
+    }
+});
+exports.updateTicket = updateTicket;
 const getMyTickets = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         if (!req.userId) {

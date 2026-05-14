@@ -23,7 +23,7 @@ const ticketSchema = new Schema<ITicket>(
     complaintRegarding: [
       {
         type: String,
-        enum: ["Battery", "Charger", "Motor", "Controller"],
+        enum: ["Battery", "Charger", "Motor", "Controller", "Other"],
       },
     ],
     battery: { type: componentDetailSchema },

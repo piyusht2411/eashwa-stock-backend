@@ -30,7 +30,7 @@ const ticketSchema = new mongoose_1.Schema({
     complaintRegarding: [
         {
             type: String,
-            enum: ["Battery", "Charger", "Motor", "Controller"],
+            enum: ["Battery", "Charger", "Motor", "Controller", "Other"],
         },
     ],
     battery: { type: componentDetailSchema },

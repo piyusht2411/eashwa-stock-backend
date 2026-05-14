@@ -5,6 +5,7 @@ import {
   getTickets,
   getTicketById,
   getTicketsByMonthForExport,
+  updateTicket,
   updateTicketStatus,
 } from "../controller/ticket";
 import { authenticateToken } from "../middleware/authMiddleware";
@@ -17,5 +18,6 @@ router.get("/my-ticket", authenticateToken, getMyTickets);
 router.get("/export-by-month", authenticateToken, getTicketsByMonthForExport);
 router.get("/:id", authenticateToken, getTicketById);
 router.patch("/:id/status", authenticateToken, updateTicketStatus);
+router.patch("/:id", authenticateToken, updateTicket);
 
 export default router;
