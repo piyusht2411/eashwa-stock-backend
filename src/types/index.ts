@@ -170,13 +170,13 @@ export interface IOrder extends Document {
   piPdf: string;
   submittedBy: Types.ObjectId;
   status:
-    | "pending_verification"
-    | "payment_received"
-    | "payment_not_received"
-    | "ready_for_dispatch"
-    | "pending"
-    | "cancelled"
-    | "completed";
+  | "pending_verification"
+  | "payment_received"
+  | "payment_not_received"
+  | "ready_for_dispatch"
+  | "pending"
+  | "cancelled"
+  | "completed";
   orderId?: string;
   driverNumber?: string;
   vehicleNumber?: string;
@@ -207,7 +207,7 @@ export interface ITicket extends Document {
   charger?: IComponentDetail;
   motor?: IComponentDetail;
   controller?: IComponentDetail;
-  type: "Replacement" | "Short" | "Bill";
+  type: "Repair" | "Replacement" | "Short" | "Bill";
   problemDescription?: string;
   purchaseDate: Date;
   complainDate: Date;

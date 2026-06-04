@@ -39,7 +39,7 @@ const ticketSchema = new mongoose_1.Schema({
     controller: { type: componentDetailSchema },
     type: {
         type: String,
-        enum: ["Replacement", "Short", "Bill"],
+        enum: ["Repair", "Replacement", "Short", "Bill"],
         required: true,
     },
     problemDescription: { type: String },

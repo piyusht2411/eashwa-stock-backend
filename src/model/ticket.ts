@@ -32,7 +32,7 @@ const ticketSchema = new Schema<ITicket>(
     controller: { type: componentDetailSchema },
     type: {
       type: String,
-      enum: ["Replacement", "Short", "Bill"],
+      enum: ["Repair", "Replacement", "Short", "Bill"],
       required: true,
     },
     problemDescription: { type: String },
