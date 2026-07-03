@@ -81,7 +81,9 @@ var corsOptions = {
         "https://eashwa-frontend-iptp.vercel.app",
         "https://eashwastock.in",
         "https://www.eashwastock.in",
-        "https://dummy-phi-eight.vercel.app"
+        "https://dummy-phi-eight.vercel.app",
+        "https://eashwa-stock.vercel.app",
+        "https://www.eashwa-stock.vercel.app"
     ],
     credentials: true,
 };
