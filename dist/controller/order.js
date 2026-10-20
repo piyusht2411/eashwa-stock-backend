@@ -552,12 +552,14 @@ const getAppOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         const auth = yield requireAppRole(req, res, ["accounts", "dispatch", "admin", "guard"]);
         if (!auth)
             return;
-        const tab = req.query.tab === "history" ? "history" : "queue";
+        const filter = req.query.filter || "";
         const page = Math.max(1, parseInt(req.query.page) || 1);
-        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+        // Excel export fetches the whole filtered list in one go (not for guards)
+        const isExport = req.query.export === "true" && auth.appRole !== "guard";
+        const limit = isExport ? 5000 : Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
         const month = /^\d{4}-\d{2}$/.test(req.query.month || "") ? req.query.month : undefined;
         const search = (req.query.search || "").trim() || undefined;
-        const result = yield orderService.getAppOrders(auth.appRole, tab, page, limit, month, search);
+        const result = yield orderService.getAppOrders(auth.appRole, filter, page, limit, month, search);
         res.status(200).json(Object.assign({ success: true }, result));
     }
     catch (error) {
@@ -575,9 +577,9 @@ const getAppOrderById = (req, res) => __awaiter(void 0, void 0, void 0, function
             res.status(404).json({ success: false, message: "Order not found." });
             return;
         }
-        // Guards only see orders approved by admin
-        if (auth.appRole === "guard" && order.status !== "completed") {
-            res.status(403).json({ success: false, message: "This order is not approved yet." });
+        // Guards only see orders approved or rejected by admin
+        if (auth.appRole === "guard" && !(yield orderService.canGuardSeeOrder(req.params.id))) {
+            res.status(403).json({ success: false, message: "This order has not been reviewed by admin yet." });
             return;
         }
         res.status(200).json({ success: true, data: order });

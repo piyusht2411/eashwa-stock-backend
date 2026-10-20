@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAppOrders = exports.getDispatchOrders = exports.getAllOrders = exports.getMyOrders = exports.findOrderById = exports.deleteOrder = exports.updateOrder = exports.findOrderByPiNumber = exports.createOrder = void 0;
+exports.getAppOrders = exports.canGuardSeeOrder = exports.APP_ORDER_FILTERS = exports.getDispatchOrders = exports.getAllOrders = exports.getMyOrders = exports.findOrderById = exports.deleteOrder = exports.updateOrder = exports.findOrderByPiNumber = exports.createOrder = void 0;
 const mongoose_1 = require("mongoose");
 const pushService_1 = require("./pushService");
 const order_1 = __importDefault(require("../model/order"));
@@ -280,37 +280,59 @@ const getDispatchOrders = (filters) => __awaiter(void 0, void 0, void 0, functio
     return order_1.default.find(query).sort({ createdAt: -1 });
 });
 exports.getDispatchOrders = getDispatchOrders;
-// Which statuses each app role works on ("queue") or has already handled ("history")
-const APP_ORDER_STATUSES = {
+// Orders an admin has sent back to the dispatch head at least once
+const ADMIN_REJECTED = { approvalHistory: { $elemMatch: { stage: "admin", action: "rejected" } } };
+// Rejected by admin and not approved since (guards see these alongside approved orders)
+const GUARD_REJECTED = Object.assign({ status: { $ne: "completed" } }, ADMIN_REJECTED);
+// Filter pills shown in the app for each role. The first one is the default.
+// "work" filters are the role's to-do list and show the oldest order first.
+exports.APP_ORDER_FILTERS = {
     accounts: {
-        queue: ["pending_verification"],
-        history: ["payment_not_received", "ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"],
+        to_verify: { query: { status: "pending_verification" }, work: true },
+        approved: {
+            query: { status: { $in: ["ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"] } },
+        },
+        rejected: { query: { status: "payment_not_received" } },
+        all: { query: {} },
     },
     dispatch: {
-        queue: ["ready_for_dispatch", "pending"],
-        history: ["pending_admin_approval", "completed", "cancelled"],
+        to_dispatch: { query: { status: "ready_for_dispatch" }, work: true },
+        on_hold: { query: { status: "pending" }, work: true },
+        sent_for_approval: { query: { status: "pending_admin_approval" } },
+        // Accounts approval clears rejectionReason, so a reason here comes from the admin
+        rejected_by_admin: { query: { status: { $in: ["ready_for_dispatch", "pending"] }, rejectionReason: { $nin: [null, ""] } } },
+        cancelled: { query: { status: "cancelled" } },
+        all: { query: { status: { $in: ["ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"] } } },
     },
     admin: {
-        queue: ["pending_admin_approval"],
-        history: ["completed", "cancelled"],
+        to_approve: { query: { status: "pending_admin_approval" }, work: true },
+        approved: { query: { status: "completed" } },
+        sent_back: { query: ADMIN_REJECTED },
+        all: { query: {} },
     },
     guard: {
-        queue: ["completed"],
-        history: ["completed"],
+        approved: { query: { status: "completed" } },
+        rejected_by_admin: { query: GUARD_REJECTED },
+        all: { query: { $or: [{ status: "completed" }, GUARD_REJECTED] } },
     },
 };
-const getAppOrders = (role, tab, page, limit, month, search) => __awaiter(void 0, void 0, void 0, function* () {
-    const query = { status: { $in: APP_ORDER_STATUSES[role][tab] } };
+const canGuardSeeOrder = (id) => __awaiter(void 0, void 0, void 0, function* () { return !!(yield order_1.default.exists(Object.assign({ _id: id }, exports.APP_ORDER_FILTERS.guard.all.query))); });
+exports.canGuardSeeOrder = canGuardSeeOrder;
+const getAppOrders = (role, filter, page, limit, month, search) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const filters = exports.APP_ORDER_FILTERS[role];
+    const selected = (_a = filters[filter]) !== null && _a !== void 0 ? _a : Object.values(filters)[0];
+    const conditions = [selected.query];
     if (month) {
         const [year, monthNum] = month.split("-").map(Number);
-        query.createdAt = { $gte: new Date(year, monthNum - 1, 1), $lt: new Date(year, monthNum, 1) };
+        conditions.push({ createdAt: { $gte: new Date(year, monthNum - 1, 1), $lt: new Date(year, monthNum, 1) } });
     }
     if (search) {
         const pattern = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-        query.$or = [{ orderId: pattern }, { piNumber: pattern }, { partyName: pattern }];
+        conditions.push({ $or: [{ orderId: pattern }, { piNumber: pattern }, { partyName: pattern }] });
     }
-    // Work queues show the oldest first; guards and history show the latest first
-    const sort = tab === "queue" && role !== "guard" ? { createdAt: 1 } : { updatedAt: -1 };
+    const query = { $and: conditions };
+    const sort = selected.work ? { createdAt: 1 } : { updatedAt: -1 };
     const [orders, total] = yield Promise.all([
         order_1.default.find(query)
             .sort(sort)

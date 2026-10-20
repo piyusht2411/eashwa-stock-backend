@@ -656,13 +656,15 @@ export const getAppOrders = async (req: Request, res: Response): Promise<void> =
     const auth = await requireAppRole(req, res, ["accounts", "dispatch", "admin", "guard"]);
     if (!auth) return;
 
-    const tab = req.query.tab === "history" ? "history" : "queue";
+    const filter = (req.query.filter as string) || "";
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+    // Excel export fetches the whole filtered list in one go (not for guards)
+    const isExport = req.query.export === "true" && auth.appRole !== "guard";
+    const limit = isExport ? 5000 : Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
     const month = /^\d{4}-\d{2}$/.test((req.query.month as string) || "") ? (req.query.month as string) : undefined;
     const search = ((req.query.search as string) || "").trim() || undefined;
 
-    const result = await orderService.getAppOrders(auth.appRole, tab, page, limit, month, search);
+    const result = await orderService.getAppOrders(auth.appRole, filter, page, limit, month, search);
     res.status(200).json({ success: true, ...result });
   } catch (error: any) {
     res.status(500).json({ success: false, message: "Failed to fetch orders.", error: error.message });
@@ -679,9 +681,9 @@ export const getAppOrderById = async (req: Request, res: Response): Promise<void
       res.status(404).json({ success: false, message: "Order not found." });
       return;
     }
-    // Guards only see orders approved by admin
-    if (auth.appRole === "guard" && order.status !== "completed") {
-      res.status(403).json({ success: false, message: "This order is not approved yet." });
+    // Guards only see orders approved or rejected by admin
+    if (auth.appRole === "guard" && !(await orderService.canGuardSeeOrder(req.params.id))) {
+      res.status(403).json({ success: false, message: "This order has not been reviewed by admin yet." });
       return;
     }
     res.status(200).json({ success: true, data: order });

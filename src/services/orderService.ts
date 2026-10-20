@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import { sendNotificationToRole } from "./pushService";
-import { IOrder, OrderStatus } from "../types";
+import { IOrder } from "../types";
 import Order from "../model/order";
 import { AppRole } from "../config/appRoles";
 
@@ -325,48 +325,71 @@ export const getDispatchOrders = async (filters: {
   return Order.find(query).sort({ createdAt: -1 });
 };
 
-// Which statuses each app role works on ("queue") or has already handled ("history")
-const APP_ORDER_STATUSES: Record<AppRole, { queue: OrderStatus[]; history: OrderStatus[] }> = {
+// Orders an admin has sent back to the dispatch head at least once
+const ADMIN_REJECTED = { approvalHistory: { $elemMatch: { stage: "admin", action: "rejected" } } };
+
+// Rejected by admin and not approved since (guards see these alongside approved orders)
+const GUARD_REJECTED = { status: { $ne: "completed" }, ...ADMIN_REJECTED };
+
+// Filter pills shown in the app for each role. The first one is the default.
+// "work" filters are the role's to-do list and show the oldest order first.
+export const APP_ORDER_FILTERS: Record<AppRole, Record<string, { query: any; work?: boolean }>> = {
   accounts: {
-    queue: ["pending_verification"],
-    history: ["payment_not_received", "ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"],
+    to_verify: { query: { status: "pending_verification" }, work: true },
+    approved: {
+      query: { status: { $in: ["ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"] } },
+    },
+    rejected: { query: { status: "payment_not_received" } },
+    all: { query: {} },
   },
   dispatch: {
-    queue: ["ready_for_dispatch", "pending"],
-    history: ["pending_admin_approval", "completed", "cancelled"],
+    to_dispatch: { query: { status: "ready_for_dispatch" }, work: true },
+    on_hold: { query: { status: "pending" }, work: true },
+    sent_for_approval: { query: { status: "pending_admin_approval" } },
+    // Accounts approval clears rejectionReason, so a reason here comes from the admin
+    rejected_by_admin: { query: { status: { $in: ["ready_for_dispatch", "pending"] }, rejectionReason: { $nin: [null, ""] } } },
+    cancelled: { query: { status: "cancelled" } },
+    all: { query: { status: { $in: ["ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"] } } },
   },
   admin: {
-    queue: ["pending_admin_approval"],
-    history: ["completed", "cancelled"],
+    to_approve: { query: { status: "pending_admin_approval" }, work: true },
+    approved: { query: { status: "completed" } },
+    sent_back: { query: ADMIN_REJECTED },
+    all: { query: {} },
   },
   guard: {
-    queue: ["completed"],
-    history: ["completed"],
+    approved: { query: { status: "completed" } },
+    rejected_by_admin: { query: GUARD_REJECTED },
+    all: { query: { $or: [{ status: "completed" }, GUARD_REJECTED] } },
   },
 };
 
+export const canGuardSeeOrder = async (id: string) => !!(await Order.exists({ _id: id, ...APP_ORDER_FILTERS.guard.all.query }));
+
 export const getAppOrders = async (
   role: AppRole,
-  tab: "queue" | "history",
+  filter: string,
   page: number,
   limit: number,
   month?: string,
   search?: string
 ) => {
-  const query: any = { status: { $in: APP_ORDER_STATUSES[role][tab] } };
+  const filters = APP_ORDER_FILTERS[role];
+  const selected = filters[filter] ?? Object.values(filters)[0];
+  const conditions: any[] = [selected.query];
 
   if (month) {
     const [year, monthNum] = month.split("-").map(Number);
-    query.createdAt = { $gte: new Date(year, monthNum - 1, 1), $lt: new Date(year, monthNum, 1) };
+    conditions.push({ createdAt: { $gte: new Date(year, monthNum - 1, 1), $lt: new Date(year, monthNum, 1) } });
   }
 
   if (search) {
     const pattern = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    query.$or = [{ orderId: pattern }, { piNumber: pattern }, { partyName: pattern }];
+    conditions.push({ $or: [{ orderId: pattern }, { piNumber: pattern }, { partyName: pattern }] });
   }
 
-  // Work queues show the oldest first; guards and history show the latest first
-  const sort: any = tab === "queue" && role !== "guard" ? { createdAt: 1 } : { updatedAt: -1 };
+  const query = { $and: conditions };
+  const sort: any = selected.work ? { createdAt: 1 } : { updatedAt: -1 };
 
   const [orders, total] = await Promise.all([
     Order.find(query)
@@ -383,4 +406,3 @@ export const getAppOrders = async (
     pagination: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
   };
 };
-
