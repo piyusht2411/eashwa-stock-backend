@@ -1,5 +1,4 @@
 import express from "express";
-// import { webhook } from "../controller/twillio";
 import { authenticateToken } from "../middleware/authMiddleware";
 import {
   deleteOrder,
@@ -14,6 +13,10 @@ import {
   submitOrder,
   updateOrder,
   updateOrderPriority,
+  getAppOrders,
+  getAppOrderById,
+  accountsOrderAction,
+  adminOrderAction,
 } from "../controller/order";
 import { validateRequest } from "../middleware/validateRequest";
 import { getMyOrdersValidation } from "../validation";
@@ -62,11 +65,13 @@ router.get("/dispatch", authenticateToken, getDispatchOrders);
 router.post("/deliver/:orderId", authenticateToken, deliverOrder);
 router.post("/pending/:orderId", authenticateToken, markPending);
 router.post("/cancel/:orderId", authenticateToken, markCancel);
+// Mobile app approval flow (accounts -> dispatch head -> admin -> guard)
+router.get("/app/list", authenticateToken, getAppOrders);
+router.get("/app/:id", authenticateToken, getAppOrderById);
+router.post("/app/:id/accounts", authenticateToken, accountsOrderAction);
+router.post("/app/:id/admin", authenticateToken, adminOrderAction);
 router.put("/:id", authenticateToken, updateOrder);
 router.delete("/:id", authenticateToken, deleteOrder);
 router.get("/:id", authenticateToken, getOrderById);
-
-// WhatsApp webhook
-// router.post("/whatsapp/webhook", webhook);
 
 export default router;

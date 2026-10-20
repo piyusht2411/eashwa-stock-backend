@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateTicketStatusService = exports.getAllTicketsService = exports.createTicketService = void 0;
+exports.updateTicketStatusService = exports.getAllTicketsService = exports.approvalResetFor = exports.createTicketService = void 0;
 const ticket_1 = __importDefault(require("../model/ticket"));
 const createTicketService = (data) => __awaiter(void 0, void 0, void 0, function* () {
     const ticket = new ticket_1.default(data);
@@ -20,6 +20,14 @@ const createTicketService = (data) => __awaiter(void 0, void 0, void 0, function
     return ticket;
 });
 exports.createTicketService = createTicketService;
+// Closing a ticket sends it to admins for approval; reopening takes it out of the flow
+const approvalResetFor = (status) => ({
+    approvalStatus: status === "Pending" ? null : "pending",
+    approvedBy: null,
+    approvedAt: null,
+    approvalRemark: null,
+});
+exports.approvalResetFor = approvalResetFor;
 const getAllTicketsService = (filters) => __awaiter(void 0, void 0, void 0, function* () {
     const page = parseInt(filters.page) || 1;
     const limit = parseInt(filters.limit) || 10;
@@ -39,6 +47,13 @@ const getAllTicketsService = (filters) => __awaiter(void 0, void 0, void 0, func
     }
     if (filters.type) {
         query.type = filters.type;
+    }
+    // "any" = every ticket that has entered the admin approval flow
+    if (filters.approvalStatus === "any") {
+        query.approvalStatus = { $ne: null };
+    }
+    else if (["pending", "approved", "rejected"].includes(filters.approvalStatus)) {
+        query.approvalStatus = filters.approvalStatus;
     }
     const [tickets, total] = yield Promise.all([
         ticket_1.default.find(query)
@@ -65,7 +80,7 @@ const getAllTicketsService = (filters) => __awaiter(void 0, void 0, void 0, func
 });
 exports.getAllTicketsService = getAllTicketsService;
 const updateTicketStatusService = (id, status, warrantyStatus, statusRemark) => __awaiter(void 0, void 0, void 0, function* () {
-    const update = { status };
+    const update = Object.assign({ status }, (0, exports.approvalResetFor)(status));
     if (warrantyStatus) {
         update.warrantyStatus = warrantyStatus;
     }

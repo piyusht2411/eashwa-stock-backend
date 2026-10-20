@@ -1,7 +1,8 @@
 import { Types } from "mongoose";
-import * as notificationService from "./notificationService";
-import { IOrder } from "../types";
+import { sendNotificationToRole } from "./pushService";
+import { IOrder, OrderStatus } from "../types";
 import Order from "../model/order";
+import { AppRole } from "../config/appRoles";
 
 export const createOrder = async (data: Partial<IOrder>): Promise<IOrder> => {
   const order = new Order(data);
@@ -33,10 +34,6 @@ export const deleteOrder = async (
 
 export const findOrderById = async (id: Types.ObjectId | string) => {
   return Order.findById(id).populate("submittedBy", "name email").lean(); // Use lean() for better performance since we're just reading
-};
-
-export const findOrderBySid = async (sid: string): Promise<IOrder | null> => {
-  return Order.findOne({ accountsMessageSid: sid });
 };
 
 export const getMyOrders = async (
@@ -302,7 +299,12 @@ export const getDispatchOrders = async (filters: {
   const overdueOrders = await Order.find(overdueQuery);
 
   for (const order of overdueOrders as IOrder[]) {
-    await notificationService.sendReminderToDispatch(order);
+    await sendNotificationToRole(
+      "dispatch",
+      "⏰ Order Past Deadline",
+      `Order ${order.orderId} (${order.partyName}) is past its deadline and still pending.`,
+      { orderId: String(order._id), type: "order_reminder" }
+    );
     //@ts-ignore
     await updateOrder(order._id, { reminderSent: true });
   }
@@ -322,3 +324,63 @@ export const getDispatchOrders = async (filters: {
   }
   return Order.find(query).sort({ createdAt: -1 });
 };
+
+// Which statuses each app role works on ("queue") or has already handled ("history")
+const APP_ORDER_STATUSES: Record<AppRole, { queue: OrderStatus[]; history: OrderStatus[] }> = {
+  accounts: {
+    queue: ["pending_verification"],
+    history: ["payment_not_received", "ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"],
+  },
+  dispatch: {
+    queue: ["ready_for_dispatch", "pending"],
+    history: ["pending_admin_approval", "completed", "cancelled"],
+  },
+  admin: {
+    queue: ["pending_admin_approval"],
+    history: ["completed", "cancelled"],
+  },
+  guard: {
+    queue: ["completed"],
+    history: ["completed"],
+  },
+};
+
+export const getAppOrders = async (
+  role: AppRole,
+  tab: "queue" | "history",
+  page: number,
+  limit: number,
+  month?: string,
+  search?: string
+) => {
+  const query: any = { status: { $in: APP_ORDER_STATUSES[role][tab] } };
+
+  if (month) {
+    const [year, monthNum] = month.split("-").map(Number);
+    query.createdAt = { $gte: new Date(year, monthNum - 1, 1), $lt: new Date(year, monthNum, 1) };
+  }
+
+  if (search) {
+    const pattern = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    query.$or = [{ orderId: pattern }, { piNumber: pattern }, { partyName: pattern }];
+  }
+
+  // Work queues show the oldest first; guards and history show the latest first
+  const sort: any = tab === "queue" && role !== "guard" ? { createdAt: 1 } : { updatedAt: -1 };
+
+  const [orders, total] = await Promise.all([
+    Order.find(query)
+      .sort(sort)
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate("submittedBy", "name email"),
+    Order.countDocuments(query),
+  ]);
+
+  const totalPages = Math.ceil(total / limit);
+  return {
+    orders,
+    pagination: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
+  };
+};
+

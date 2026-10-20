@@ -1,27 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -35,23 +12,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMyTickets = exports.updateTicket = exports.getTicketById = exports.getTicketsByMonthForExport = exports.updateTicketStatus = exports.getTickets = exports.createTicket = void 0;
+exports.updateTicketApproval = exports.getMyTickets = exports.updateTicket = exports.getTicketById = exports.getTicketsByMonthForExport = exports.updateTicketStatus = exports.getTickets = exports.createTicket = void 0;
 const ticketService_1 = require("../services/ticketService");
 const ticket_1 = __importDefault(require("../model/ticket"));
 const user_1 = __importDefault(require("../model/user"));
-const admin = __importStar(require("firebase-admin"));
-const sendNotificationToRole = (role, title, body, data) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const users = yield user_1.default.find({ role, fcmToken: { $ne: null } }).select("fcmToken");
-        const tokens = users.map((u) => u.fcmToken).filter(Boolean);
-        if (tokens.length === 0)
-            return;
-        const response = yield admin.messaging().sendEachForMulticast({ notification: { title, body }, data, tokens });
-        console.log(`✅ Notification sent to ${role}s | Success: ${response.successCount}, Failed: ${response.failureCount}`);
-    }
-    catch (err) {
-        console.error(`❌ Failed to send notification to ${role}:`, err);
-    }
+const pushService_1 = require("../services/pushService");
+const notifyAdminsForApproval = (ticket) => (0, pushService_1.sendNotificationToRole)("admin", "📝 Ticket Awaiting Approval", `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.location}) was closed by service and needs your approval.`, {
+    ticketId: String(ticket._id),
+    ticketNumber: String(ticket.ticketId),
+    type: "ticket_approval",
+    status: ticket.status,
+    screen: "TicketDetail",
 });
 const createTicket = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -73,7 +44,12 @@ const createTicket = (req, res) => __awaiter(void 0, void 0, void 0, function* (
 exports.createTicket = createTicket;
 const getTickets = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const result = yield (0, ticketService_1.getAllTicketsService)(req.query);
+        const filters = Object.assign({}, req.query);
+        const user = yield user_1.default.findById(req.userId).select("role");
+        if ((user === null || user === void 0 ? void 0 : user.role) === "guard") {
+            filters.approvalStatus = "approved";
+        }
+        const result = yield (0, ticketService_1.getAllTicketsService)(filters);
         res.json(Object.assign({ message: "Tickets fetched successfully" }, result));
     }
     catch (error) {
@@ -95,29 +71,9 @@ const updateTicketStatus = (req, res) => __awaiter(void 0, void 0, void 0, funct
             res.status(404).json({ message: "Ticket not found" });
             return;
         }
-        if (status === "Complete") {
-            yield sendNotificationToRole("guard", "✅ Ticket Resolved", `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.location}) has been resolved.`, {
-                ticketId: String(ticket._id),
-                ticketNumber: String(ticket.ticketId),
-                type: "ticket_closed",
-                status: ticket.status,
-                screen: "TicketDetail",
-            });
+        if (ticket.status !== "Pending") {
+            yield notifyAdminsForApproval(ticket);
         }
-        // if (status === "Out of Warranty") {
-        //   await sendNotificationToRole(
-        //     "guard",
-        //     "❌ Ticket Out of Warranty",
-        //     `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.showroomName}) is out of warranty.`,
-        //     {
-        //       ticketId: String(ticket._id),
-        //       ticketNumber: String(ticket.ticketId),
-        //       type: "ticket_out_of_warranty",
-        //       status: ticket.status,
-        //       screen: "TicketDetail",
-        //     }
-        //   );
-        // }
         res.json({ message: "Status updated", ticket });
     }
     catch (error) {
@@ -167,6 +123,7 @@ const getTicketById = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     try {
         const ticket = yield ticket_1.default.findById(id)
             .populate("submittedBy", "name email")
+            .populate("approvedBy", "name")
             .populate("dealer", "name phone location");
         if (!ticket) {
             res.status(404).json({ message: "Ticket not found" });
@@ -198,12 +155,24 @@ const updateTicket = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             update.warrantyStatus = null;
         if (update.statusRemark === "")
             update.statusRemark = undefined;
+        const existing = yield ticket_1.default.findById(id).select("status");
+        if (!existing) {
+            res.status(404).json({ message: "Ticket not found" });
+            return;
+        }
+        const statusChanged = update.status !== undefined && update.status !== existing.status;
+        if (statusChanged) {
+            Object.assign(update, (0, ticketService_1.approvalResetFor)(update.status));
+        }
         const ticket = yield ticket_1.default.findByIdAndUpdate(id, update, { new: true })
             .populate("submittedBy", "name email")
             .populate("dealer", "name phone location");
         if (!ticket) {
             res.status(404).json({ message: "Ticket not found" });
             return;
+        }
+        if (statusChanged && ticket.status !== "Pending") {
+            yield notifyAdminsForApproval(ticket);
         }
         res.json({ message: "Ticket updated", ticket });
     }
@@ -248,3 +217,60 @@ const getMyTickets = (req, res) => __awaiter(void 0, void 0, void 0, function* (
     }
 });
 exports.getMyTickets = getMyTickets;
+// Admin approves/rejects a ticket closed by service. Approved tickets go to guards;
+// rejected tickets are reopened so service can work on them again.
+const updateTicketApproval = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        const { action, remark } = req.body;
+        const user = yield user_1.default.findById(req.userId).select("role name");
+        if ((user === null || user === void 0 ? void 0 : user.role) !== "admin") {
+            res.status(403).json({ message: "Only admins can approve tickets" });
+            return;
+        }
+        if (!["approved", "rejected"].includes(action)) {
+            res.status(400).json({ message: "Action must be 'approved' or 'rejected'" });
+            return;
+        }
+        if (action === "rejected" && !(remark === null || remark === void 0 ? void 0 : remark.trim())) {
+            res.status(400).json({ message: "Rejection reason is required" });
+            return;
+        }
+        const ticket = yield ticket_1.default.findById(id);
+        if (!ticket) {
+            res.status(404).json({ message: "Ticket not found" });
+            return;
+        }
+        if (ticket.approvalStatus !== "pending") {
+            res.status(400).json({ message: "Ticket is not awaiting approval" });
+            return;
+        }
+        ticket.approvalStatus = action;
+        ticket.approvedBy = user._id;
+        ticket.approvedAt = new Date();
+        ticket.approvalRemark = (remark === null || remark === void 0 ? void 0 : remark.trim()) || undefined;
+        if (action === "rejected") {
+            ticket.status = "Pending";
+        }
+        yield ticket.save();
+        yield ticket.populate([
+            { path: "submittedBy", select: "name email" },
+            { path: "approvedBy", select: "name" },
+            { path: "dealer", select: "name phone location" },
+        ]);
+        if (action === "approved") {
+            yield (0, pushService_1.sendNotificationToRole)("guard", "✅ Ticket Resolved", `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.location}) has been resolved.`, {
+                ticketId: String(ticket._id),
+                ticketNumber: String(ticket.ticketId),
+                type: "ticket_closed",
+                status: ticket.status,
+                screen: "TicketDetail",
+            });
+        }
+        res.json({ success: true, message: `Ticket ${action}`, data: ticket });
+    }
+    catch (error) {
+        res.status(500).json({ message: "Error updating approval", error: error.message });
+    }
+});
+exports.updateTicketApproval = updateTicketApproval;

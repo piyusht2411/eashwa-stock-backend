@@ -57,6 +57,15 @@ const ticketSchema = new mongoose_1.Schema({
     },
     statusRemark: { type: String },
     submittedBy: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true },
+    // Set to "pending" when service closes the ticket; admins approve/reject from the app
+    approvalStatus: {
+        type: String,
+        enum: ["pending", "approved", "rejected", null],
+        default: null,
+    },
+    approvedBy: { type: mongoose_1.Schema.Types.ObjectId, ref: "User" },
+    approvedAt: { type: Date },
+    approvalRemark: { type: String },
 }, { timestamps: true });
 ticketSchema.pre("save", function (next) {
     return __awaiter(this, void 0, void 0, function* () {

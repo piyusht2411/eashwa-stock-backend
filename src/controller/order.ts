@@ -1,8 +1,35 @@
 import { Request, Response } from "express";
 import * as orderService from "../services/orderService";
-import * as notificationService from "../services/notificationService";
+import { sendNotificationToRole } from "../services/pushService";
 import Order from "../model/order";
 import User from "../model/user";
+import { AppRole, getAppRole } from "../config/appRoles";
+import { IOrder } from "../types";
+
+// Loads the caller and checks their app role; sends 403 and returns null if not allowed
+const requireAppRole = async (req: Request, res: Response, roles: AppRole[]) => {
+  const user = await User.findById(req.userId).select("role email employeeId");
+  const appRole = getAppRole(user);
+  if (!user || !appRole || !roles.includes(appRole)) {
+    res.status(403).json({ success: false, message: "You are not allowed to perform this action." });
+    return null;
+  }
+  return { user, appRole };
+};
+
+const historyEntry = (stage: "accounts" | "dispatch" | "admin", action: string, by: any, reason?: string) => ({
+  stage,
+  action,
+  by,
+  reason: reason?.trim() || undefined,
+  at: new Date(),
+});
+
+const orderPushData = (order: IOrder, type: string) => ({
+  orderId: String(order._id),
+  type,
+  status: order.status,
+});
 
 export const submitOrder = async (
   req: Request,
@@ -36,11 +63,12 @@ export const submitOrder = async (
       submittedBy: req.userId,
     };
     const order = await orderService.createOrder(orderData);
-    const sid = await notificationService.sendAccountsVerificationNotification(
-      order
+    await sendNotificationToRole(
+      "accounts",
+      "🧾 New Order for Payment Verification",
+      `PI ${order.piNumber} • ${order.partyName} (${order.location}) • ₹${order.totalAmount}`,
+      orderPushData(order, "order_accounts")
     );
-    //@ts-ignore
-    await orderService.updateOrder(order._id, { accountsMessageSid: sid });
     res.status(200).json({ success: true, order });
   } catch (error) {
     res
@@ -54,7 +82,14 @@ export const deliverOrder = async (
   res: Response
 ): Promise<void> => {
   try {
+    const auth = await requireAppRole(req, res, ["dispatch"]);
+    if (!auth) return;
+
     const { driverNumber, vehicleNumber, transporterName } = req.body;
+    if (!driverNumber?.trim() || !vehicleNumber?.trim() || !transporterName?.trim()) {
+      res.status(400).json({ success: false, message: "Driver number, vehicle number and transporter name are required." });
+      return;
+    }
     const order = await orderService.findOrderById(req.params.orderId);
     if (
       !order ||
@@ -65,17 +100,27 @@ export const deliverOrder = async (
         .json({ success: false, message: "Invalid order status." });
       return;
     }
-    const updatedOrder = await orderService.updateOrder(req.params.orderId, {
-      status: "completed",
-      driverNumber,
-      vehicleNumber,
-      transporterName,
-      pendingReason: "-",
-    });
+    const updatedOrder = await Order.findByIdAndUpdate(
+      req.params.orderId,
+      {
+        status: "pending_admin_approval",
+        driverNumber,
+        vehicleNumber,
+        transporterName,
+        pendingReason: "-",
+        $push: { approvalHistory: historyEntry("dispatch", "dispatched", auth.user._id) },
+      },
+      { new: true }
+    );
     if (updatedOrder) {
-      await notificationService.sendDeepakConfirmation(updatedOrder);
+      await sendNotificationToRole(
+        "admin",
+        "🚚 Order Dispatched – Approval Needed",
+        `Order ${updatedOrder.orderId} for ${updatedOrder.partyName} • Vehicle ${vehicleNumber}`,
+        orderPushData(updatedOrder, "order_admin")
+      );
     }
-    res.status(200).json({ success: true });
+    res.status(200).json({ success: true, order: updatedOrder });
   } catch (error) {
     res
       .status(500)
@@ -99,6 +144,8 @@ export const markPending = async (
         .json({ success: false, message: "Pending reason is required." });
       return;
     }
+    const auth = await requireAppRole(req, res, ["dispatch"]);
+    if (!auth) return;
     const order = await orderService.findOrderById(req.params.orderId);
     if (!order || order.status !== "ready_for_dispatch") {
       res
@@ -106,11 +153,16 @@ export const markPending = async (
         .json({ success: false, message: "Invalid order status." });
       return;
     }
-    await orderService.updateOrder(req.params.orderId, {
-      status: "pending",
-      pendingReason,
-    });
-    res.status(200).json({ success: true });
+    const updatedOrder = await Order.findByIdAndUpdate(
+      req.params.orderId,
+      {
+        status: "pending",
+        pendingReason,
+        $push: { approvalHistory: historyEntry("dispatch", "pending", auth.user._id, pendingReason) },
+      },
+      { new: true }
+    );
+    res.status(200).json({ success: true, order: updatedOrder });
   } catch (error) {
     res
       .status(500)
@@ -134,6 +186,8 @@ export const markCancel = async (
         .json({ success: false, message: "Cancel reason is required." });
       return;
     }
+    const auth = await requireAppRole(req, res, ["dispatch"]);
+    if (!auth) return;
     const order = await orderService.findOrderById(req.params.orderId);
     if (!order || order.status !== "ready_for_dispatch") {
       res
@@ -141,11 +195,16 @@ export const markCancel = async (
         .json({ success: false, message: "Invalid order status." });
       return;
     }
-    await orderService.updateOrder(req.params.orderId, {
-      status: "cancelled",
-      cancelReason,
-    });
-    res.status(200).json({ success: true });
+    const updatedOrder = await Order.findByIdAndUpdate(
+      req.params.orderId,
+      {
+        status: "cancelled",
+        cancelReason,
+        $push: { approvalHistory: historyEntry("dispatch", "cancelled", auth.user._id, cancelReason) },
+      },
+      { new: true }
+    );
+    res.status(200).json({ success: true, order: updatedOrder });
   } catch (error) {
     res
       .status(500)
@@ -477,6 +536,7 @@ export const getOrdersByMonthForExport = async (req: Request, res: Response): Pr
       "payment_not_received",
       "ready_for_dispatch",
       "pending",
+      "pending_admin_approval",
       "cancelled",
       "completed",
     ];
@@ -583,3 +643,155 @@ export const getOrderById = async (
     });
   }
 };
+
+// ====================== Mobile app approval flow ======================
+
+const populateAppOrder = (id: string) =>
+  Order.findById(id)
+    .populate("submittedBy", "name email")
+    .populate("approvalHistory.by", "name");
+
+export const getAppOrders = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const auth = await requireAppRole(req, res, ["accounts", "dispatch", "admin", "guard"]);
+    if (!auth) return;
+
+    const tab = req.query.tab === "history" ? "history" : "queue";
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const month = /^\d{4}-\d{2}$/.test((req.query.month as string) || "") ? (req.query.month as string) : undefined;
+    const search = ((req.query.search as string) || "").trim() || undefined;
+
+    const result = await orderService.getAppOrders(auth.appRole, tab, page, limit, month, search);
+    res.status(200).json({ success: true, ...result });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: "Failed to fetch orders.", error: error.message });
+  }
+};
+
+export const getAppOrderById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const auth = await requireAppRole(req, res, ["accounts", "dispatch", "admin", "guard"]);
+    if (!auth) return;
+
+    const order = await populateAppOrder(req.params.id);
+    if (!order) {
+      res.status(404).json({ success: false, message: "Order not found." });
+      return;
+    }
+    // Guards only see orders approved by admin
+    if (auth.appRole === "guard" && order.status !== "completed") {
+      res.status(403).json({ success: false, message: "This order is not approved yet." });
+      return;
+    }
+    res.status(200).json({ success: true, data: order });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: "Failed to fetch order.", error: error.message });
+  }
+};
+
+// Accounts verifies payment: approved -> dispatch head, rejected -> payment_not_received
+export const accountsOrderAction = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const auth = await requireAppRole(req, res, ["accounts"]);
+    if (!auth) return;
+
+    const { action, reason, remark } = req.body;
+    if (!["approved", "rejected"].includes(action)) {
+      res.status(400).json({ success: false, message: "Action must be 'approved' or 'rejected'." });
+      return;
+    }
+    if (action === "rejected" && !reason?.trim()) {
+      res.status(400).json({ success: false, message: "Rejection reason is required." });
+      return;
+    }
+
+    const order = await Order.findById(req.params.id);
+    if (!order || !["pending_verification", "payment_not_received"].includes(order.status)) {
+      res.status(400).json({ success: false, message: "Order is not awaiting payment verification." });
+      return;
+    }
+
+    if (action === "approved") {
+      order.status = "ready_for_dispatch";
+      order.orderId = order.orderId || `ORD-${Date.now()}`;
+      order.remark = remark?.trim() || "";
+      order.rejectionReason = undefined;
+      order.approvalHistory.push(historyEntry("accounts", "approved", auth.user._id, remark) as any);
+    } else {
+      order.status = "payment_not_received";
+      order.rejectionReason = reason.trim();
+      order.approvalHistory.push(historyEntry("accounts", "rejected", auth.user._id, reason) as any);
+    }
+    await order.save();
+
+    if (action === "approved") {
+      await sendNotificationToRole(
+        "dispatch",
+        "📦 Order Ready for Dispatch",
+        `Order ${order.orderId} • ${order.partyName} (${order.location}) • Qty ${order.quantity}`,
+        orderPushData(order, "order_dispatch")
+      );
+    }
+
+    res.status(200).json({ success: true, message: `Order ${action}.`, data: await populateAppOrder(req.params.id) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: "Failed to update order.", error: error.message });
+  }
+};
+
+// Admin approves a dispatched order (-> guard) or sends it back to the dispatch head
+export const adminOrderAction = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const auth = await requireAppRole(req, res, ["admin"]);
+    if (!auth) return;
+
+    const { action, reason } = req.body;
+    if (!["approved", "rejected"].includes(action)) {
+      res.status(400).json({ success: false, message: "Action must be 'approved' or 'rejected'." });
+      return;
+    }
+    if (action === "rejected" && !reason?.trim()) {
+      res.status(400).json({ success: false, message: "Rejection reason is required." });
+      return;
+    }
+
+    const order = await Order.findById(req.params.id);
+    if (!order || order.status !== "pending_admin_approval") {
+      res.status(400).json({ success: false, message: "Order is not awaiting admin approval." });
+      return;
+    }
+
+    if (action === "approved") {
+      order.status = "completed";
+      order.rejectionReason = undefined;
+      order.approvalHistory.push(historyEntry("admin", "approved", auth.user._id) as any);
+    } else {
+      order.status = "ready_for_dispatch";
+      order.rejectionReason = reason.trim();
+      order.approvalHistory.push(historyEntry("admin", "rejected", auth.user._id, reason) as any);
+    }
+    await order.save();
+
+    if (action === "approved") {
+      await sendNotificationToRole(
+        "guard",
+        "✅ Order Approved for Dispatch",
+        `Order ${order.orderId} • ${order.partyName} • Vehicle ${order.vehicleNumber} • Driver ${order.driverNumber}`,
+        orderPushData(order, "order_guard")
+      );
+    } else {
+      await sendNotificationToRole(
+        "dispatch",
+        "❌ Dispatch Rejected by Admin",
+        `Order ${order.orderId} • ${order.partyName}: ${order.rejectionReason}`,
+        orderPushData(order, "order_dispatch")
+      );
+    }
+
+    res.status(200).json({ success: true, message: `Order ${action}.`, data: await populateAppOrder(req.params.id) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: "Failed to update order.", error: error.message });
+  }
+};
+

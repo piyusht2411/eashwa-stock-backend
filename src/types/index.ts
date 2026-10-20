@@ -102,17 +102,6 @@ export interface IDailyLead extends Document {
   callNotPick: number;
 }
 
-export interface mUser extends Document {
-  name: string;
-  messageId: string;
-  whatsappNumber: string;
-  secondMessageId: string;
-  productDescription: string;
-  vendorName: string;
-  amount: string;
-  time: string;
-}
-
 export interface Ilead extends Document {
   leadDate: Date;
   callingDate: Date;
@@ -152,6 +141,25 @@ export interface LeadType extends Document {
   isTargetLead?: boolean;
 }
 
+// Flow: accounts verifies payment -> dispatch head dispatches -> admin approves -> guard
+export type OrderStatus =
+  | "pending_verification"   // waiting for accounts
+  | "payment_received"
+  | "payment_not_received"   // rejected by accounts
+  | "ready_for_dispatch"     // waiting for dispatch head
+  | "pending"                // held by dispatch head
+  | "pending_admin_approval" // dispatched, waiting for admin
+  | "cancelled"
+  | "completed";             // approved by admin, visible to guard
+
+export interface IOrderHistoryEntry {
+  stage: "accounts" | "dispatch" | "admin";
+  action: string;
+  by?: Types.ObjectId;
+  reason?: string;
+  at: Date;
+}
+
 export interface IOrder extends Document {
   piNumber: string;
   partyName: string;
@@ -169,26 +177,18 @@ export interface IOrder extends Document {
   dealerPhone: string;
   piPdf: string;
   submittedBy: Types.ObjectId;
-  status:
-  | "pending_verification"
-  | "payment_received"
-  | "payment_not_received"
-  | "ready_for_dispatch"
-  | "pending"
-  | "cancelled"
-  | "completed";
+  status: OrderStatus;
   orderId?: string;
   driverNumber?: string;
   vehicleNumber?: string;
-  accountsMessageSid?: string;
   reminderSent: boolean;
   priority: number;
   transporterName?: string;
   pendingReason?: string;
   cancelReason?: string;
   remark?: String;
-  remarkQuerySid?: String;
-  remarkInputSid?: String;
+  rejectionReason?: string;
+  approvalHistory: IOrderHistoryEntry[];
 }
 
 export interface IComponentDetail {
@@ -215,23 +215,13 @@ export interface ITicket extends Document {
   warrantyStatus?: "In Warranty" | "Out of Warranty";  // set by admin on update
   statusRemark?: string;
   submittedBy: Types.ObjectId;
+  approvalStatus?: "pending" | "approved" | "rejected" | null; // admin approval after service closes the ticket
+  approvedBy?: Types.ObjectId;
+  approvedAt?: Date;
+  approvalRemark?: string;
 }
 
 export interface ICounter extends Document {
   name: string;
   seq: number;
-}
-
-export interface IRequest extends Document {
-  name: string;
-  productDescription: string;
-  vendorName: string;
-  userPhoneNumber: string;
-  amount: number;
-  time: string;
-  status: 'pending' | 'accepted' | 'rejected';
-  statusUpdatedBy?: Types.ObjectId;
-  rejectionReason?: string;
-  createdAt: Date;
-  updatedAt: Date;
 }

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction, RequestHandler } from "express";
+import { getAppRole } from "../config/appRoles";
 import { Types } from "mongoose";
 import { compareSync } from "bcrypt";
 import jwt from "jsonwebtoken";
@@ -201,6 +202,7 @@ export const login = async (req: Request, res: Response) => {
       ok: true,
       message: "User login successful",
       user: user,
+      appRole: getAppRole(user), // role in the mobile app (null = no app access)
       authToken: authToken,
     });
   } catch (err: any) {

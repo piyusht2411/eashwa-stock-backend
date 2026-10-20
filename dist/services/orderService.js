@@ -1,27 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -35,9 +12,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDispatchOrders = exports.getAllOrders = exports.getMyOrders = exports.findOrderBySid = exports.findOrderById = exports.deleteOrder = exports.updateOrder = exports.findOrderByPiNumber = exports.createOrder = void 0;
+exports.getAppOrders = exports.getDispatchOrders = exports.getAllOrders = exports.getMyOrders = exports.findOrderById = exports.deleteOrder = exports.updateOrder = exports.findOrderByPiNumber = exports.createOrder = void 0;
 const mongoose_1 = require("mongoose");
-const notificationService = __importStar(require("./notificationService"));
+const pushService_1 = require("./pushService");
 const order_1 = __importDefault(require("../model/order"));
 const createOrder = (data) => __awaiter(void 0, void 0, void 0, function* () {
     const order = new order_1.default(data);
@@ -64,10 +41,6 @@ const findOrderById = (id) => __awaiter(void 0, void 0, void 0, function* () {
     return order_1.default.findById(id).populate("submittedBy", "name email").lean(); // Use lean() for better performance since we're just reading
 });
 exports.findOrderById = findOrderById;
-const findOrderBySid = (sid) => __awaiter(void 0, void 0, void 0, function* () {
-    return order_1.default.findOne({ accountsMessageSid: sid });
-});
-exports.findOrderBySid = findOrderBySid;
 const getMyOrders = (userId_1, ...args_1) => __awaiter(void 0, [userId_1, ...args_1], void 0, function* (userId, page = 1, limit = 10, month, orderId, sortBy) {
     const query = { submittedBy: new mongoose_1.Types.ObjectId(userId) }; // Explicitly convert to ObjectId for safety
     if (month) {
@@ -287,7 +260,7 @@ const getDispatchOrders = (filters) => __awaiter(void 0, void 0, void 0, functio
     };
     const overdueOrders = yield order_1.default.find(overdueQuery);
     for (const order of overdueOrders) {
-        yield notificationService.sendReminderToDispatch(order);
+        yield (0, pushService_1.sendNotificationToRole)("dispatch", "⏰ Order Past Deadline", `Order ${order.orderId} (${order.partyName}) is past its deadline and still pending.`, { orderId: String(order._id), type: "order_reminder" });
         //@ts-ignore
         yield (0, exports.updateOrder)(order._id, { reminderSent: true });
     }
@@ -307,3 +280,49 @@ const getDispatchOrders = (filters) => __awaiter(void 0, void 0, void 0, functio
     return order_1.default.find(query).sort({ createdAt: -1 });
 });
 exports.getDispatchOrders = getDispatchOrders;
+// Which statuses each app role works on ("queue") or has already handled ("history")
+const APP_ORDER_STATUSES = {
+    accounts: {
+        queue: ["pending_verification"],
+        history: ["payment_not_received", "ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"],
+    },
+    dispatch: {
+        queue: ["ready_for_dispatch", "pending"],
+        history: ["pending_admin_approval", "completed", "cancelled"],
+    },
+    admin: {
+        queue: ["pending_admin_approval"],
+        history: ["completed", "cancelled"],
+    },
+    guard: {
+        queue: ["completed"],
+        history: ["completed"],
+    },
+};
+const getAppOrders = (role, tab, page, limit, month, search) => __awaiter(void 0, void 0, void 0, function* () {
+    const query = { status: { $in: APP_ORDER_STATUSES[role][tab] } };
+    if (month) {
+        const [year, monthNum] = month.split("-").map(Number);
+        query.createdAt = { $gte: new Date(year, monthNum - 1, 1), $lt: new Date(year, monthNum, 1) };
+    }
+    if (search) {
+        const pattern = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+        query.$or = [{ orderId: pattern }, { piNumber: pattern }, { partyName: pattern }];
+    }
+    // Work queues show the oldest first; guards and history show the latest first
+    const sort = tab === "queue" && role !== "guard" ? { createdAt: 1 } : { updatedAt: -1 };
+    const [orders, total] = yield Promise.all([
+        order_1.default.find(query)
+            .sort(sort)
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .populate("submittedBy", "name email"),
+        order_1.default.countDocuments(query),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    return {
+        orders,
+        pagination: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
+    };
+});
+exports.getAppOrders = getAppOrders;

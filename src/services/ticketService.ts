@@ -9,6 +9,14 @@ export const createTicketService = async (
   return ticket;
 };
 
+// Closing a ticket sends it to admins for approval; reopening takes it out of the flow
+export const approvalResetFor = (status: string) => ({
+  approvalStatus: status === "Pending" ? null : "pending",
+  approvedBy: null,
+  approvedAt: null,
+  approvalRemark: null,
+});
+
 export const getAllTicketsService = async (filters: any) => {
   const page = parseInt(filters.page) || 1;
   const limit = parseInt(filters.limit) || 10;
@@ -33,6 +41,13 @@ export const getAllTicketsService = async (filters: any) => {
 
   if (filters.type) {
     query.type = filters.type;
+  }
+
+  // "any" = every ticket that has entered the admin approval flow
+  if (filters.approvalStatus === "any") {
+    query.approvalStatus = { $ne: null };
+  } else if (["pending", "approved", "rejected"].includes(filters.approvalStatus)) {
+    query.approvalStatus = filters.approvalStatus;
   }
 
   const [tickets, total] = await Promise.all([
@@ -67,7 +82,7 @@ export const updateTicketStatusService = async (
   warrantyStatus?: "In Warranty" | "Out of Warranty",
   statusRemark?: string
 ): Promise<ITicket | null> => {
-  const update: any = { status };
+  const update: any = { status, ...approvalResetFor(status) };
   if (warrantyStatus) {
     update.warrantyStatus = warrantyStatus;
   }

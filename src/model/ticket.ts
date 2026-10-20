@@ -50,6 +50,15 @@ const ticketSchema = new Schema<ITicket>(
     },
     statusRemark: { type: String },
     submittedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    // Set to "pending" when service closes the ticket; admins approve/reject from the app
+    approvalStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected", null],
+      default: null,
+    },
+    approvedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    approvedAt: { type: Date },
+    approvalRemark: { type: String },
   },
   { timestamps: true }
 );

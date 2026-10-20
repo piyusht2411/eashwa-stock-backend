@@ -35,11 +35,34 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOrderById = exports.getOrdersByMonthForExport = exports.deleteOrder = exports.updateOrder = exports.updateOrderPriority = exports.getDispatchOrders = exports.getAllOrders = exports.getMyOrders = exports.markCancel = exports.markPending = exports.deliverOrder = exports.submitOrder = void 0;
+exports.adminOrderAction = exports.accountsOrderAction = exports.getAppOrderById = exports.getAppOrders = exports.getOrderById = exports.getOrdersByMonthForExport = exports.deleteOrder = exports.updateOrder = exports.updateOrderPriority = exports.getDispatchOrders = exports.getAllOrders = exports.getMyOrders = exports.markCancel = exports.markPending = exports.deliverOrder = exports.submitOrder = void 0;
 const orderService = __importStar(require("../services/orderService"));
-const notificationService = __importStar(require("../services/notificationService"));
+const pushService_1 = require("../services/pushService");
 const order_1 = __importDefault(require("../model/order"));
 const user_1 = __importDefault(require("../model/user"));
+const appRoles_1 = require("../config/appRoles");
+// Loads the caller and checks their app role; sends 403 and returns null if not allowed
+const requireAppRole = (req, res, roles) => __awaiter(void 0, void 0, void 0, function* () {
+    const user = yield user_1.default.findById(req.userId).select("role email employeeId");
+    const appRole = (0, appRoles_1.getAppRole)(user);
+    if (!user || !appRole || !roles.includes(appRole)) {
+        res.status(403).json({ success: false, message: "You are not allowed to perform this action." });
+        return null;
+    }
+    return { user, appRole };
+});
+const historyEntry = (stage, action, by, reason) => ({
+    stage,
+    action,
+    by,
+    reason: (reason === null || reason === void 0 ? void 0 : reason.trim()) || undefined,
+    at: new Date(),
+});
+const orderPushData = (order, type) => ({
+    orderId: String(order._id),
+    type,
+    status: order.status,
+});
 const submitOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const data = req.body;
@@ -59,9 +82,7 @@ const submitOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         }
         const orderData = Object.assign(Object.assign({}, data), { quantity: parseInt(data.quantity), totalAmount: parseFloat(data.totalAmount), amountReceived: parseFloat(data.amountReceived), deadline: new Date(data.deadline), piPdf: data.piPdf, submittedBy: req.userId });
         const order = yield orderService.createOrder(orderData);
-        const sid = yield notificationService.sendAccountsVerificationNotification(order);
-        //@ts-ignore
-        yield orderService.updateOrder(order._id, { accountsMessageSid: sid });
+        yield (0, pushService_1.sendNotificationToRole)("accounts", "🧾 New Order for Payment Verification", `PI ${order.piNumber} • ${order.partyName} (${order.location}) • ₹${order.totalAmount}`, orderPushData(order, "order_accounts"));
         res.status(200).json({ success: true, order });
     }
     catch (error) {
@@ -73,7 +94,14 @@ const submitOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 exports.submitOrder = submitOrder;
 const deliverOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        const auth = yield requireAppRole(req, res, ["dispatch"]);
+        if (!auth)
+            return;
         const { driverNumber, vehicleNumber, transporterName } = req.body;
+        if (!(driverNumber === null || driverNumber === void 0 ? void 0 : driverNumber.trim()) || !(vehicleNumber === null || vehicleNumber === void 0 ? void 0 : vehicleNumber.trim()) || !(transporterName === null || transporterName === void 0 ? void 0 : transporterName.trim())) {
+            res.status(400).json({ success: false, message: "Driver number, vehicle number and transporter name are required." });
+            return;
+        }
         const order = yield orderService.findOrderById(req.params.orderId);
         if (!order ||
             (order.status !== "ready_for_dispatch" && order.status !== "pending")) {
@@ -82,17 +110,18 @@ const deliverOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 .json({ success: false, message: "Invalid order status." });
             return;
         }
-        const updatedOrder = yield orderService.updateOrder(req.params.orderId, {
-            status: "completed",
+        const updatedOrder = yield order_1.default.findByIdAndUpdate(req.params.orderId, {
+            status: "pending_admin_approval",
             driverNumber,
             vehicleNumber,
             transporterName,
             pendingReason: "-",
-        });
+            $push: { approvalHistory: historyEntry("dispatch", "dispatched", auth.user._id) },
+        }, { new: true });
         if (updatedOrder) {
-            yield notificationService.sendDeepakConfirmation(updatedOrder);
+            yield (0, pushService_1.sendNotificationToRole)("admin", "🚚 Order Dispatched – Approval Needed", `Order ${updatedOrder.orderId} for ${updatedOrder.partyName} • Vehicle ${vehicleNumber}`, orderPushData(updatedOrder, "order_admin"));
         }
-        res.status(200).json({ success: true });
+        res.status(200).json({ success: true, order: updatedOrder });
     }
     catch (error) {
         res
@@ -112,6 +141,9 @@ const markPending = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 .json({ success: false, message: "Pending reason is required." });
             return;
         }
+        const auth = yield requireAppRole(req, res, ["dispatch"]);
+        if (!auth)
+            return;
         const order = yield orderService.findOrderById(req.params.orderId);
         if (!order || order.status !== "ready_for_dispatch") {
             res
@@ -119,11 +151,12 @@ const markPending = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 .json({ success: false, message: "Invalid order status." });
             return;
         }
-        yield orderService.updateOrder(req.params.orderId, {
+        const updatedOrder = yield order_1.default.findByIdAndUpdate(req.params.orderId, {
             status: "pending",
             pendingReason,
-        });
-        res.status(200).json({ success: true });
+            $push: { approvalHistory: historyEntry("dispatch", "pending", auth.user._id, pendingReason) },
+        }, { new: true });
+        res.status(200).json({ success: true, order: updatedOrder });
     }
     catch (error) {
         res
@@ -143,6 +176,9 @@ const markCancel = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 .json({ success: false, message: "Cancel reason is required." });
             return;
         }
+        const auth = yield requireAppRole(req, res, ["dispatch"]);
+        if (!auth)
+            return;
         const order = yield orderService.findOrderById(req.params.orderId);
         if (!order || order.status !== "ready_for_dispatch") {
             res
@@ -150,11 +186,12 @@ const markCancel = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 .json({ success: false, message: "Invalid order status." });
             return;
         }
-        yield orderService.updateOrder(req.params.orderId, {
+        const updatedOrder = yield order_1.default.findByIdAndUpdate(req.params.orderId, {
             status: "cancelled",
             cancelReason,
-        });
-        res.status(200).json({ success: true });
+            $push: { approvalHistory: historyEntry("dispatch", "cancelled", auth.user._id, cancelReason) },
+        }, { new: true });
+        res.status(200).json({ success: true, order: updatedOrder });
     }
     catch (error) {
         res
@@ -419,6 +456,7 @@ const getOrdersByMonthForExport = (req, res) => __awaiter(void 0, void 0, void 0
             "payment_not_received",
             "ready_for_dispatch",
             "pending",
+            "pending_admin_approval",
             "cancelled",
             "completed",
         ];
@@ -505,3 +543,134 @@ const getOrderById = (req, res) => __awaiter(void 0, void 0, void 0, function* (
     }
 });
 exports.getOrderById = getOrderById;
+// ====================== Mobile app approval flow ======================
+const populateAppOrder = (id) => order_1.default.findById(id)
+    .populate("submittedBy", "name email")
+    .populate("approvalHistory.by", "name");
+const getAppOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const auth = yield requireAppRole(req, res, ["accounts", "dispatch", "admin", "guard"]);
+        if (!auth)
+            return;
+        const tab = req.query.tab === "history" ? "history" : "queue";
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+        const month = /^\d{4}-\d{2}$/.test(req.query.month || "") ? req.query.month : undefined;
+        const search = (req.query.search || "").trim() || undefined;
+        const result = yield orderService.getAppOrders(auth.appRole, tab, page, limit, month, search);
+        res.status(200).json(Object.assign({ success: true }, result));
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch orders.", error: error.message });
+    }
+});
+exports.getAppOrders = getAppOrders;
+const getAppOrderById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const auth = yield requireAppRole(req, res, ["accounts", "dispatch", "admin", "guard"]);
+        if (!auth)
+            return;
+        const order = yield populateAppOrder(req.params.id);
+        if (!order) {
+            res.status(404).json({ success: false, message: "Order not found." });
+            return;
+        }
+        // Guards only see orders approved by admin
+        if (auth.appRole === "guard" && order.status !== "completed") {
+            res.status(403).json({ success: false, message: "This order is not approved yet." });
+            return;
+        }
+        res.status(200).json({ success: true, data: order });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch order.", error: error.message });
+    }
+});
+exports.getAppOrderById = getAppOrderById;
+// Accounts verifies payment: approved -> dispatch head, rejected -> payment_not_received
+const accountsOrderAction = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const auth = yield requireAppRole(req, res, ["accounts"]);
+        if (!auth)
+            return;
+        const { action, reason, remark } = req.body;
+        if (!["approved", "rejected"].includes(action)) {
+            res.status(400).json({ success: false, message: "Action must be 'approved' or 'rejected'." });
+            return;
+        }
+        if (action === "rejected" && !(reason === null || reason === void 0 ? void 0 : reason.trim())) {
+            res.status(400).json({ success: false, message: "Rejection reason is required." });
+            return;
+        }
+        const order = yield order_1.default.findById(req.params.id);
+        if (!order || !["pending_verification", "payment_not_received"].includes(order.status)) {
+            res.status(400).json({ success: false, message: "Order is not awaiting payment verification." });
+            return;
+        }
+        if (action === "approved") {
+            order.status = "ready_for_dispatch";
+            order.orderId = order.orderId || `ORD-${Date.now()}`;
+            order.remark = (remark === null || remark === void 0 ? void 0 : remark.trim()) || "";
+            order.rejectionReason = undefined;
+            order.approvalHistory.push(historyEntry("accounts", "approved", auth.user._id, remark));
+        }
+        else {
+            order.status = "payment_not_received";
+            order.rejectionReason = reason.trim();
+            order.approvalHistory.push(historyEntry("accounts", "rejected", auth.user._id, reason));
+        }
+        yield order.save();
+        if (action === "approved") {
+            yield (0, pushService_1.sendNotificationToRole)("dispatch", "📦 Order Ready for Dispatch", `Order ${order.orderId} • ${order.partyName} (${order.location}) • Qty ${order.quantity}`, orderPushData(order, "order_dispatch"));
+        }
+        res.status(200).json({ success: true, message: `Order ${action}.`, data: yield populateAppOrder(req.params.id) });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Failed to update order.", error: error.message });
+    }
+});
+exports.accountsOrderAction = accountsOrderAction;
+// Admin approves a dispatched order (-> guard) or sends it back to the dispatch head
+const adminOrderAction = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const auth = yield requireAppRole(req, res, ["admin"]);
+        if (!auth)
+            return;
+        const { action, reason } = req.body;
+        if (!["approved", "rejected"].includes(action)) {
+            res.status(400).json({ success: false, message: "Action must be 'approved' or 'rejected'." });
+            return;
+        }
+        if (action === "rejected" && !(reason === null || reason === void 0 ? void 0 : reason.trim())) {
+            res.status(400).json({ success: false, message: "Rejection reason is required." });
+            return;
+        }
+        const order = yield order_1.default.findById(req.params.id);
+        if (!order || order.status !== "pending_admin_approval") {
+            res.status(400).json({ success: false, message: "Order is not awaiting admin approval." });
+            return;
+        }
+        if (action === "approved") {
+            order.status = "completed";
+            order.rejectionReason = undefined;
+            order.approvalHistory.push(historyEntry("admin", "approved", auth.user._id));
+        }
+        else {
+            order.status = "ready_for_dispatch";
+            order.rejectionReason = reason.trim();
+            order.approvalHistory.push(historyEntry("admin", "rejected", auth.user._id, reason));
+        }
+        yield order.save();
+        if (action === "approved") {
+            yield (0, pushService_1.sendNotificationToRole)("guard", "✅ Order Approved for Dispatch", `Order ${order.orderId} • ${order.partyName} • Vehicle ${order.vehicleNumber} • Driver ${order.driverNumber}`, orderPushData(order, "order_guard"));
+        }
+        else {
+            yield (0, pushService_1.sendNotificationToRole)("dispatch", "❌ Dispatch Rejected by Admin", `Order ${order.orderId} • ${order.partyName}: ${order.rejectionReason}`, orderPushData(order, "order_dispatch"));
+        }
+        res.status(200).json({ success: true, message: `Order ${action}.`, data: yield populateAppOrder(req.params.id) });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: "Failed to update order.", error: error.message });
+    }
+});
+exports.adminOrderAction = adminOrderAction;

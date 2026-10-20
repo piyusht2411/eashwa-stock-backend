@@ -1,26 +1,22 @@
 import { Request, Response } from "express";
-import { createTicketService, getAllTicketsService, updateTicketStatusService } from "../services/ticketService"
+import { approvalResetFor, createTicketService, getAllTicketsService, updateTicketStatusService } from "../services/ticketService"
 import Ticket from "../model/ticket";
 import User from "../model/user";
-import * as admin from "firebase-admin";
+import { sendNotificationToRole } from "../services/pushService";
 
-const sendNotificationToRole = async (
-  role: "admin" | "guard",
-  title: string,
-  body: string,
-  data: Record<string, string>
-) => {
-  try {
-    const users = await User.find({ role, fcmToken: { $ne: null } }).select("fcmToken");
-    const tokens = users.map((u) => u.fcmToken!).filter(Boolean);
-    if (tokens.length === 0) return;
-    const response = await admin.messaging().sendEachForMulticast({ notification: { title, body }, data, tokens });
-    console.log(`✅ Notification sent to ${role}s | Success: ${response.successCount}, Failed: ${response.failureCount}`);
-  } catch (err) {
-    console.error(`❌ Failed to send notification to ${role}:`, err);
-  }
-};
-
+const notifyAdminsForApproval = (ticket: any) =>
+  sendNotificationToRole(
+    "admin",
+    "📝 Ticket Awaiting Approval",
+    `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.location}) was closed by service and needs your approval.`,
+    {
+      ticketId: String(ticket._id),
+      ticketNumber: String(ticket.ticketId),
+      type: "ticket_approval",
+      status: ticket.status,
+      screen: "TicketDetail",
+    }
+  );
 
 export const createTicket = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -40,7 +36,12 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
 
 export const getTickets = async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = await getAllTicketsService(req.query);
+    const filters: any = { ...req.query };
+    const user = await User.findById(req.userId).select("role");
+    if (user?.role === "guard") {
+      filters.approvalStatus = "approved";
+    }
+    const result = await getAllTicketsService(filters);
     res.json({ message: "Tickets fetched successfully", ...result });
   } catch (error) {
     res.status(500).json({ message: "Error fetching tickets", error });
@@ -64,35 +65,9 @@ export const updateTicketStatus = async (req: Request, res: Response): Promise<v
       return;
     }
 
-    if (status === "Complete") {
-      await sendNotificationToRole(
-        "guard",
-        "✅ Ticket Resolved",
-        `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.location}) has been resolved.`,
-        {
-          ticketId: String(ticket._id),
-          ticketNumber: String(ticket.ticketId),
-          type: "ticket_closed",
-          status: ticket.status,
-          screen: "TicketDetail",
-        }
-      );
+    if (ticket.status !== "Pending") {
+      await notifyAdminsForApproval(ticket);
     }
-
-    // if (status === "Out of Warranty") {
-    //   await sendNotificationToRole(
-    //     "guard",
-    //     "❌ Ticket Out of Warranty",
-    //     `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.showroomName}) is out of warranty.`,
-    //     {
-    //       ticketId: String(ticket._id),
-    //       ticketNumber: String(ticket.ticketId),
-    //       type: "ticket_out_of_warranty",
-    //       status: ticket.status,
-    //       screen: "TicketDetail",
-    //     }
-    //   );
-    // }
 
     res.json({ message: "Status updated", ticket });
   } catch (error) {
@@ -149,6 +124,7 @@ export const getTicketById = async (req: Request, res: Response): Promise<void> 
   try {
     const ticket = await Ticket.findById(id)
       .populate("submittedBy", "name email")
+      .populate("approvedBy", "name")
       .populate("dealer", "name phone location");
     if (!ticket) {
       res.status(404).json({ message: "Ticket not found" });
@@ -178,6 +154,16 @@ export const updateTicket = async (req: Request, res: Response): Promise<void> =
     if (update.warrantyStatus === "") update.warrantyStatus = null;
     if (update.statusRemark === "") update.statusRemark = undefined;
 
+    const existing = await Ticket.findById(id).select("status");
+    if (!existing) {
+      res.status(404).json({ message: "Ticket not found" });
+      return;
+    }
+    const statusChanged = update.status !== undefined && update.status !== existing.status;
+    if (statusChanged) {
+      Object.assign(update, approvalResetFor(update.status));
+    }
+
     const ticket = await Ticket.findByIdAndUpdate(id, update, { new: true })
       .populate("submittedBy", "name email")
       .populate("dealer", "name phone location");
@@ -185,6 +171,9 @@ export const updateTicket = async (req: Request, res: Response): Promise<void> =
     if (!ticket) {
       res.status(404).json({ message: "Ticket not found" });
       return;
+    }
+    if (statusChanged && ticket.status !== "Pending") {
+      await notifyAdminsForApproval(ticket);
     }
     res.json({ message: "Ticket updated", ticket });
   } catch (error) {
@@ -230,5 +219,73 @@ export const getMyTickets = async (req: Request, res: Response): Promise<void> =
       message: "Error fetching your tickets",
       error: error.message || error,
     });
+  }
+};
+
+// Admin approves/rejects a ticket closed by service. Approved tickets go to guards;
+// rejected tickets are reopened so service can work on them again.
+export const updateTicketApproval = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { action, remark } = req.body;
+
+    const user = await User.findById(req.userId).select("role name");
+    if (user?.role !== "admin") {
+      res.status(403).json({ message: "Only admins can approve tickets" });
+      return;
+    }
+
+    if (!["approved", "rejected"].includes(action)) {
+      res.status(400).json({ message: "Action must be 'approved' or 'rejected'" });
+      return;
+    }
+    if (action === "rejected" && !remark?.trim()) {
+      res.status(400).json({ message: "Rejection reason is required" });
+      return;
+    }
+
+    const ticket = await Ticket.findById(id);
+    if (!ticket) {
+      res.status(404).json({ message: "Ticket not found" });
+      return;
+    }
+    if (ticket.approvalStatus !== "pending") {
+      res.status(400).json({ message: "Ticket is not awaiting approval" });
+      return;
+    }
+
+    ticket.approvalStatus = action;
+    ticket.approvedBy = user._id as any;
+    ticket.approvedAt = new Date();
+    ticket.approvalRemark = remark?.trim() || undefined;
+    if (action === "rejected") {
+      ticket.status = "Pending";
+    }
+    await ticket.save();
+
+    await ticket.populate([
+      { path: "submittedBy", select: "name email" },
+      { path: "approvedBy", select: "name" },
+      { path: "dealer", select: "name phone location" },
+    ]);
+
+    if (action === "approved") {
+      await sendNotificationToRole(
+        "guard",
+        "✅ Ticket Resolved",
+        `Ticket #${ticket.ticketId} for ${ticket.dealerName} (${ticket.location}) has been resolved.`,
+        {
+          ticketId: String(ticket._id),
+          ticketNumber: String(ticket.ticketId),
+          type: "ticket_closed",
+          status: ticket.status,
+          screen: "TicketDetail",
+        }
+      );
+    }
+
+    res.json({ success: true, message: `Ticket ${action}`, data: ticket });
+  } catch (error: any) {
+    res.status(500).json({ message: "Error updating approval", error: error.message });
   }
 };

@@ -27,6 +27,7 @@ const orderSchema = new Schema<IOrder>(
         "payment_not_received",
         "ready_for_dispatch",
         "pending",
+        "pending_admin_approval",
         "cancelled",
         "completed",
       ],
@@ -39,11 +40,20 @@ const orderSchema = new Schema<IOrder>(
     remark: {type: String},
     pendingReason :{ type :String, default: "" },
      cancelReason :{ type :String, default: "" },
-    accountsMessageSid: { type: String },
     reminderSent: { type: Boolean, default: false },
     priority: { type: Number, default: null },
-    remarkQuerySid: { type: String }, 
-    remarkInputSid: { type: String },  
+    // Latest rejection reason from accounts or admin
+    rejectionReason: { type: String },
+    approvalHistory: [
+      {
+        _id: false,
+        stage: { type: String, enum: ["accounts", "dispatch", "admin"], required: true },
+        action: { type: String, required: true },
+        by: { type: Schema.Types.ObjectId, ref: "User" },
+        reason: { type: String },
+        at: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );

@@ -4,7 +4,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-// import { webhook } from "../controller/twillio";
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const order_1 = require("../controller/order");
 const validateRequest_1 = require("../middleware/validateRequest");
@@ -38,9 +37,12 @@ router.get("/dispatch", authMiddleware_1.authenticateToken, order_1.getDispatchO
 router.post("/deliver/:orderId", authMiddleware_1.authenticateToken, order_1.deliverOrder);
 router.post("/pending/:orderId", authMiddleware_1.authenticateToken, order_1.markPending);
 router.post("/cancel/:orderId", authMiddleware_1.authenticateToken, order_1.markCancel);
+// Mobile app approval flow (accounts -> dispatch head -> admin -> guard)
+router.get("/app/list", authMiddleware_1.authenticateToken, order_1.getAppOrders);
+router.get("/app/:id", authMiddleware_1.authenticateToken, order_1.getAppOrderById);
+router.post("/app/:id/accounts", authMiddleware_1.authenticateToken, order_1.accountsOrderAction);
+router.post("/app/:id/admin", authMiddleware_1.authenticateToken, order_1.adminOrderAction);
 router.put("/:id", authMiddleware_1.authenticateToken, order_1.updateOrder);
 router.delete("/:id", authMiddleware_1.authenticateToken, order_1.deleteOrder);
 router.get("/:id", authMiddleware_1.authenticateToken, order_1.getOrderById);
-// WhatsApp webhook
-// router.post("/whatsapp/webhook", webhook);
 exports.default = router;

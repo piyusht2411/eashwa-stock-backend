@@ -36,6 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateLastWorkingDate = exports.getVisitorsOfEmployee = exports.getVisitors = exports.deleteTargetLeadFile = exports.deleteRegularLeadFile = exports.getLeads = exports.getTargetFileUploadHistory = exports.getFileUploadHistory = exports.createLeadsHistory = exports.processExcelAndCreateLeads = exports.addVisitor = exports.getEmployeeDetails = exports.getTopEmployees = exports.updateTarget = exports.getAllEmployees = exports.resetPassword = exports.verifyOtp = exports.forgotPassword = exports.getManagedEmployees = exports.updateEmployee = exports.login = exports.register = void 0;
+const appRoles_1 = require("../config/appRoles");
 const mongoose_1 = require("mongoose");
 const bcrypt_1 = require("bcrypt");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
@@ -164,6 +165,7 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             ok: true,
             message: "User login successful",
             user: user,
+            appRole: (0, appRoles_1.getAppRole)(user), // role in the mobile app (null = no app access)
             authToken: authToken,
         });
     }
