@@ -9,6 +9,7 @@ import productRoutes from "./routes/product";
 import imageRouter from "./routes/image";
 import orderRoutes from "./routes/order";
 import ticketRoutes from "./routes/ticket";
+import approvalRoutes from "./routes/approval";
 import dailyLeadRoutes from "./routes/dailyLeads";
 import dealerRoutes from "./routes/dealer";
 import morgan from "morgan";
@@ -72,6 +73,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/images", imageRouter);
 app.use("/api/orders", orderRoutes);
 app.use("/api/tickets", ticketRoutes);
+app.use("/api/approvals", approvalRoutes);
 app.use("/api/daily-leads", dailyLeadRoutes)
 app.use("/api/dealers", dealerRoutes)
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {

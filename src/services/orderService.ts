@@ -328,8 +328,12 @@ export const getDispatchOrders = async (filters: {
 // Orders an admin has sent back to the dispatch head at least once
 const ADMIN_REJECTED = { approvalHistory: { $elemMatch: { stage: "admin", action: "rejected" } } };
 
-// Rejected by admin and not approved since (guards see these alongside approved orders)
-const GUARD_REJECTED = { status: { $ne: "completed" }, ...ADMIN_REJECTED };
+// Currently rejected by admin: sent back and not yet re-dispatched or approved.
+// Shared by the Orders tab and the combined All Approvals screen so counts match.
+export const ADMIN_REJECTED_NOW = {
+  status: { $nin: ["completed", "pending_admin_approval"] },
+  ...ADMIN_REJECTED,
+};
 
 // Filter pills shown in the app for each role. The first one is the default.
 // "work" filters are the role's to-do list and show the oldest order first.
@@ -351,20 +355,19 @@ export const APP_ORDER_FILTERS: Record<AppRole, Record<string, { query: any; wor
     cancelled: { query: { status: "cancelled" } },
     all: { query: { status: { $in: ["ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"] } } },
   },
+  // Orders waiting for admin approval are handled in the combined All Approvals screen
   admin: {
-    to_approve: { query: { status: "pending_admin_approval" }, work: true },
     approved: { query: { status: "completed" } },
-    sent_back: { query: ADMIN_REJECTED },
+    rejected: { query: ADMIN_REJECTED_NOW },
     all: { query: {} },
   },
+  // Guards only ever see admin-approved orders
   guard: {
     approved: { query: { status: "completed" } },
-    rejected_by_admin: { query: GUARD_REJECTED },
-    all: { query: { $or: [{ status: "completed" }, GUARD_REJECTED] } },
   },
 };
 
-export const canGuardSeeOrder = async (id: string) => !!(await Order.exists({ _id: id, ...APP_ORDER_FILTERS.guard.all.query }));
+export const canGuardSeeOrder = async (id: string) => !!(await Order.exists({ _id: id, ...APP_ORDER_FILTERS.guard.approved.query }));
 
 export const getAppOrders = async (
   role: AppRole,

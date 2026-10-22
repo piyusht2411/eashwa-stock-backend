@@ -43,6 +43,16 @@ export const getAllTicketsService = async (filters: any) => {
     query.type = filters.type;
   }
 
+  if (filters.search?.trim()) {
+    const text = filters.search.trim();
+    const pattern = new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    query.$or = [
+      { dealerName: pattern },
+      { location: pattern },
+      ...(/^\d+$/.test(text) ? [{ ticketId: Number(text) }] : []),
+    ];
+  }
+
   // "any" = every ticket that has entered the admin approval flow
   if (filters.approvalStatus === "any") {
     query.approvalStatus = { $ne: null };
