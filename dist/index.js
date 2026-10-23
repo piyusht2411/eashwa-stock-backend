@@ -47,6 +47,7 @@ const product_1 = __importDefault(require("./routes/product"));
 const image_1 = __importDefault(require("./routes/image"));
 const order_1 = __importDefault(require("./routes/order"));
 const ticket_1 = __importDefault(require("./routes/ticket"));
+const approval_1 = __importDefault(require("./routes/approval"));
 const dailyLeads_1 = __importDefault(require("./routes/dailyLeads"));
 const dealer_1 = __importDefault(require("./routes/dealer"));
 const morgan_1 = __importDefault(require("morgan"));
@@ -95,6 +96,7 @@ app.use("/api/products", product_1.default);
 app.use("/api/images", image_1.default);
 app.use("/api/orders", order_1.default);
 app.use("/api/tickets", ticket_1.default);
+app.use("/api/approvals", approval_1.default);
 app.use("/api/daily-leads", dailyLeads_1.default);
 app.use("/api/dealers", dealer_1.default);
 app.use((err, req, res, next) => {

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAppOrders = exports.canGuardSeeOrder = exports.APP_ORDER_FILTERS = exports.getDispatchOrders = exports.getAllOrders = exports.getMyOrders = exports.findOrderById = exports.deleteOrder = exports.updateOrder = exports.findOrderByPiNumber = exports.createOrder = void 0;
+exports.getAppOrders = exports.canGuardSeeOrder = exports.APP_ORDER_FILTERS = exports.ADMIN_REJECTED_NOW = exports.getDispatchOrders = exports.getAllOrders = exports.getMyOrders = exports.findOrderById = exports.deleteOrder = exports.updateOrder = exports.findOrderByPiNumber = exports.createOrder = void 0;
 const mongoose_1 = require("mongoose");
 const pushService_1 = require("./pushService");
 const order_1 = __importDefault(require("../model/order"));
@@ -282,8 +282,9 @@ const getDispatchOrders = (filters) => __awaiter(void 0, void 0, void 0, functio
 exports.getDispatchOrders = getDispatchOrders;
 // Orders an admin has sent back to the dispatch head at least once
 const ADMIN_REJECTED = { approvalHistory: { $elemMatch: { stage: "admin", action: "rejected" } } };
-// Rejected by admin and not approved since (guards see these alongside approved orders)
-const GUARD_REJECTED = Object.assign({ status: { $ne: "completed" } }, ADMIN_REJECTED);
+// Currently rejected by admin: sent back and not yet re-dispatched or approved.
+// Shared by the Orders tab and the combined All Approvals screen so counts match.
+exports.ADMIN_REJECTED_NOW = Object.assign({ status: { $nin: ["completed", "pending_admin_approval"] } }, ADMIN_REJECTED);
 // Filter pills shown in the app for each role. The first one is the default.
 // "work" filters are the role's to-do list and show the oldest order first.
 exports.APP_ORDER_FILTERS = {
@@ -304,19 +305,18 @@ exports.APP_ORDER_FILTERS = {
         cancelled: { query: { status: "cancelled" } },
         all: { query: { status: { $in: ["ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"] } } },
     },
+    // Orders waiting for admin approval are handled in the combined All Approvals screen
     admin: {
-        to_approve: { query: { status: "pending_admin_approval" }, work: true },
         approved: { query: { status: "completed" } },
-        sent_back: { query: ADMIN_REJECTED },
+        rejected: { query: exports.ADMIN_REJECTED_NOW },
         all: { query: {} },
     },
+    // Guards only ever see admin-approved orders
     guard: {
         approved: { query: { status: "completed" } },
-        rejected_by_admin: { query: GUARD_REJECTED },
-        all: { query: { $or: [{ status: "completed" }, GUARD_REJECTED] } },
     },
 };
-const canGuardSeeOrder = (id) => __awaiter(void 0, void 0, void 0, function* () { return !!(yield order_1.default.exists(Object.assign({ _id: id }, exports.APP_ORDER_FILTERS.guard.all.query))); });
+const canGuardSeeOrder = (id) => __awaiter(void 0, void 0, void 0, function* () { return !!(yield order_1.default.exists(Object.assign({ _id: id }, exports.APP_ORDER_FILTERS.guard.approved.query))); });
 exports.canGuardSeeOrder = canGuardSeeOrder;
 const getAppOrders = (role, filter, page, limit, month, search) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;

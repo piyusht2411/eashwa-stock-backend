@@ -29,6 +29,7 @@ const approvalResetFor = (status) => ({
 });
 exports.approvalResetFor = approvalResetFor;
 const getAllTicketsService = (filters) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const page = parseInt(filters.page) || 1;
     const limit = parseInt(filters.limit) || 10;
     const skip = (page - 1) * limit;
@@ -47,6 +48,15 @@ const getAllTicketsService = (filters) => __awaiter(void 0, void 0, void 0, func
     }
     if (filters.type) {
         query.type = filters.type;
+    }
+    if ((_a = filters.search) === null || _a === void 0 ? void 0 : _a.trim()) {
+        const text = filters.search.trim();
+        const pattern = new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+        query.$or = [
+            { dealerName: pattern },
+            { location: pattern },
+            ...(/^\d+$/.test(text) ? [{ ticketId: Number(text) }] : []),
+        ];
     }
     // "any" = every ticket that has entered the admin approval flow
     if (filters.approvalStatus === "any") {
