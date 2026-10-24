@@ -336,24 +336,25 @@ export const ADMIN_REJECTED_NOW = {
 };
 
 // Filter pills shown in the app for each role. The first one is the default.
-// "work" filters are the role's to-do list and show the oldest order first.
-export const APP_ORDER_FILTERS: Record<AppRole, Record<string, { query: any; work?: boolean }>> = {
+// Every list shows the most recently updated order first.
+// Service only works on tickets, so it has no order filters
+export type OrderAppRole = Exclude<AppRole, "service">;
+
+export const APP_ORDER_FILTERS: Record<OrderAppRole, Record<string, { query: any }>> = {
   accounts: {
-    to_verify: { query: { status: "pending_verification" }, work: true },
+    to_verify: { query: { status: "pending_verification" } },
     approved: {
       query: { status: { $in: ["ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"] } },
     },
     rejected: { query: { status: "payment_not_received" } },
-    all: { query: {} },
   },
   dispatch: {
-    to_dispatch: { query: { status: "ready_for_dispatch" }, work: true },
-    on_hold: { query: { status: "pending" }, work: true },
+    to_dispatch: { query: { status: "ready_for_dispatch" } },
+    on_hold: { query: { status: "pending" } },
     sent_for_approval: { query: { status: "pending_admin_approval" } },
     // Accounts approval clears rejectionReason, so a reason here comes from the admin
     rejected_by_admin: { query: { status: { $in: ["ready_for_dispatch", "pending"] }, rejectionReason: { $nin: [null, ""] } } },
     cancelled: { query: { status: "cancelled" } },
-    all: { query: { status: { $in: ["ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"] } } },
   },
   // Orders waiting for admin approval are handled in the combined All Approvals screen
   admin: {
@@ -370,7 +371,7 @@ export const APP_ORDER_FILTERS: Record<AppRole, Record<string, { query: any; wor
 export const canGuardSeeOrder = async (id: string) => !!(await Order.exists({ _id: id, ...APP_ORDER_FILTERS.guard.approved.query }));
 
 export const getAppOrders = async (
-  role: AppRole,
+  role: OrderAppRole,
   filter: string,
   page: number,
   limit: number,
@@ -392,11 +393,10 @@ export const getAppOrders = async (
   }
 
   const query = { $and: conditions };
-  const sort: any = selected.work ? { createdAt: 1 } : { updatedAt: -1 };
 
   const [orders, total] = await Promise.all([
     Order.find(query)
-      .sort(sort)
+      .sort({ updatedAt: -1 }) // newest first
       .skip((page - 1) * limit)
       .limit(limit)
       .populate("submittedBy", "name email"),

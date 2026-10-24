@@ -71,17 +71,16 @@ export const getApprovals = async (req: Request, res: Response): Promise<void> =
       });
     }
 
-    // Waiting items show the oldest first; decided items show the latest first
-    const direction = filter === "to_approve" ? 1 : -1;
+    // Newest first, so the item a notification was just sent for is at the top
     const take = page * limit; // enough from each side to fill the requested page after merging
 
     const [orders, tickets, orderTotal, ticketTotal] = await Promise.all([
       Order.find({ $and: orderQuery })
-        .sort({ updatedAt: direction })
+        .sort({ updatedAt: -1 })
         .limit(take)
         .populate("submittedBy", "name email"),
       Ticket.find({ $and: ticketQuery })
-        .sort({ updatedAt: direction })
+        .sort({ updatedAt: -1 })
         .limit(take)
         .populate("submittedBy", "name email")
         .populate("dealer", "name phone location"),
@@ -94,7 +93,7 @@ export const getApprovals = async (req: Request, res: Response): Promise<void> =
       ...orders.map((o) => ({ kind: "order" as const, approvalStatus, sortDate: o.get("updatedAt") as Date, data: o })),
       ...tickets.map((t) => ({ kind: "ticket" as const, approvalStatus, sortDate: t.get("updatedAt") as Date, data: t })),
     ]
-      .sort((a, b) => direction * (new Date(a.sortDate).getTime() - new Date(b.sortDate).getTime()))
+      .sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())
       .slice((page - 1) * limit, page * limit);
 
     const total = orderTotal + ticketTotal;

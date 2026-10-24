@@ -664,7 +664,8 @@ export const getAppOrders = async (req: Request, res: Response): Promise<void> =
     const month = /^\d{4}-\d{2}$/.test((req.query.month as string) || "") ? (req.query.month as string) : undefined;
     const search = ((req.query.search as string) || "").trim() || undefined;
 
-    const result = await orderService.getAppOrders(auth.appRole, filter, page, limit, month, search);
+    // requireAppRole above only lets order roles through
+    const result = await orderService.getAppOrders(auth.appRole as orderService.OrderAppRole, filter, page, limit, month, search);
     res.status(200).json({ success: true, ...result });
   } catch (error: any) {
     res.status(500).json({ success: false, message: "Failed to fetch orders.", error: error.message });

@@ -24,6 +24,14 @@ const notifyAdminsForApproval = (ticket) => (0, pushService_1.sendNotificationTo
     status: ticket.status,
     screen: "TicketDetail",
 });
+// Service gets the ticket in the app; data matches the admin notification so taps open the detail
+const notifyService = (ticket, title, body, type) => (0, pushService_1.sendNotificationToRole)("service", title, body, {
+    ticketId: String(ticket._id),
+    ticketNumber: String(ticket.ticketId),
+    type,
+    status: ticket.status,
+    screen: "TicketDetail",
+});
 const createTicket = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const data = req.body;
@@ -35,6 +43,7 @@ const createTicket = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             return;
         }
         const ticket = yield (0, ticketService_1.createTicketService)(data);
+        yield notifyService(ticket, "🎫 New Ticket", `Ticket #${ticket.ticketId} raised for ${ticket.dealerName} (${ticket.location}).`, "ticket_new");
         res.status(201).json({ message: "Ticket raised successfully", ticket });
     }
     catch (error) {
@@ -266,6 +275,9 @@ const updateTicketApproval = (req, res) => __awaiter(void 0, void 0, void 0, fun
                 status: ticket.status,
                 screen: "TicketDetail",
             });
+        }
+        else {
+            yield notifyService(ticket, "↩️ Ticket Reopened", `Ticket #${ticket.ticketId} for ${ticket.dealerName} was rejected by admin: ${ticket.approvalRemark}`, "ticket_rejected");
         }
         res.json({ success: true, message: `Ticket ${action}`, data: ticket });
     }

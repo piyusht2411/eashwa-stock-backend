@@ -67,7 +67,7 @@ const getAllTicketsService = (filters) => __awaiter(void 0, void 0, void 0, func
     }
     const [tickets, total] = yield Promise.all([
         ticket_1.default.find(query)
-            .sort({ complainDate: -1 })
+            .sort({ updatedAt: -1 }) // newest first, incl. tickets reopened after an admin rejection
             .skip(skip)
             .limit(limit)
             .populate("submittedBy", "name email")

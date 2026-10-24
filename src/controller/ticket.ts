@@ -18,6 +18,16 @@ const notifyAdminsForApproval = (ticket: any) =>
     }
   );
 
+// Service gets the ticket in the app; data matches the admin notification so taps open the detail
+const notifyService = (ticket: any, title: string, body: string, type: string) =>
+  sendNotificationToRole("service", title, body, {
+    ticketId: String(ticket._id),
+    ticketNumber: String(ticket.ticketId),
+    type,
+    status: ticket.status,
+    screen: "TicketDetail",
+  });
+
 export const createTicket = async (req: Request, res: Response): Promise<void> => {
   try {
     const data = req.body;
@@ -28,6 +38,12 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
       return;
     }
     const ticket = await createTicketService(data);
+    await notifyService(
+      ticket,
+      "🎫 New Ticket",
+      `Ticket #${ticket.ticketId} raised for ${ticket.dealerName} (${ticket.location}).`,
+      "ticket_new"
+    );
     res.status(201).json({ message: "Ticket raised successfully", ticket });
   } catch (error) {
     res.status(500).json({ message: "Error creating ticket", error });
@@ -281,6 +297,13 @@ export const updateTicketApproval = async (req: Request, res: Response): Promise
           status: ticket.status,
           screen: "TicketDetail",
         }
+      );
+    } else {
+      await notifyService(
+        ticket,
+        "↩️ Ticket Reopened",
+        `Ticket #${ticket.ticketId} for ${ticket.dealerName} was rejected by admin: ${ticket.approvalRemark}`,
+        "ticket_rejected"
       );
     }
 

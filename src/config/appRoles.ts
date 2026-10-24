@@ -4,7 +4,10 @@ export const ACCOUNTS_USERS: string[] = ["hardeeptyagi@gmail.com", "EASWAH50"];
 
 export const DISPATCH_HEAD_USERS: string[] = ["nitinpandit13892@gmail.com", "EASWS0A30"];
 
-export type AppRole = "admin" | "guard" | "accounts" | "dispatch";
+// Service team: closes tickets (In / Out of Warranty) like the web ticket table
+export const SERVICE_USERS: string[] = ["EASAL009"];
+
+export type AppRole = "admin" | "guard" | "accounts" | "dispatch" | "service";
 
 const matches = (list: string[], user: { email?: string; employeeId?: string }) => {
   const ids = [user.email, user.employeeId]
@@ -22,6 +25,7 @@ export const getAppRole = (user: {
   if (!user) return null;
   if (matches(ACCOUNTS_USERS, user)) return "accounts";
   if (matches(DISPATCH_HEAD_USERS, user)) return "dispatch";
+  if (matches(SERVICE_USERS, user)) return "service";
   if (user.role === "admin" || user.role === "guard") return user.role;
   return null;
 };

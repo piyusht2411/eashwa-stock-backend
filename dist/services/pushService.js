@@ -44,16 +44,36 @@ const usersForAppRole = (role) => {
         return (0, appRoles_1.userFilterFor)(appRoles_1.ACCOUNTS_USERS);
     if (role === "dispatch")
         return (0, appRoles_1.userFilterFor)(appRoles_1.DISPATCH_HEAD_USERS);
+    if (role === "service")
+        return (0, appRoles_1.userFilterFor)(appRoles_1.SERVICE_USERS);
     return { role };
 };
 // Sends an FCM push to every app user with the given role who has logged in on a device
 const sendNotificationToRole = (role, title, body, data) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c;
     try {
         const users = yield user_1.default.find(Object.assign(Object.assign({}, usersForAppRole(role)), { fcmToken: { $ne: null } })).select("fcmToken");
         const tokens = users.map((u) => u.fcmToken).filter(Boolean);
         if (tokens.length === 0)
             return;
-        const response = yield admin.messaging().sendEachForMulticast({ notification: { title, body }, data, tokens });
+        // Same channel + priority for every push and a real send time, so Android ranks them by time
+        // (newest on top) instead of mixing high/default-priority ones; each order/ticket keeps its own tag
+        const response = yield admin.messaging().sendEachForMulticast({
+            notification: { title, body },
+            data,
+            tokens,
+            android: {
+                priority: "high",
+                notification: {
+                    channelId: "default",
+                    priority: "max",
+                    defaultSound: true,
+                    eventTimestamp: new Date(),
+                    tag: `${(_a = data.type) !== null && _a !== void 0 ? _a : "update"}-${(_c = (_b = data.orderId) !== null && _b !== void 0 ? _b : data.ticketId) !== null && _c !== void 0 ? _c : Date.now()}`,
+                },
+            },
+            apns: { payload: { aps: { sound: "default" } } },
+        });
         console.log(`✅ Notification sent to ${role} | Success: ${response.successCount}, Failed: ${response.failureCount}`);
     }
     catch (err) {

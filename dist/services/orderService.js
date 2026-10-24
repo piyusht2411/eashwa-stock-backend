@@ -285,25 +285,21 @@ const ADMIN_REJECTED = { approvalHistory: { $elemMatch: { stage: "admin", action
 // Currently rejected by admin: sent back and not yet re-dispatched or approved.
 // Shared by the Orders tab and the combined All Approvals screen so counts match.
 exports.ADMIN_REJECTED_NOW = Object.assign({ status: { $nin: ["completed", "pending_admin_approval"] } }, ADMIN_REJECTED);
-// Filter pills shown in the app for each role. The first one is the default.
-// "work" filters are the role's to-do list and show the oldest order first.
 exports.APP_ORDER_FILTERS = {
     accounts: {
-        to_verify: { query: { status: "pending_verification" }, work: true },
+        to_verify: { query: { status: "pending_verification" } },
         approved: {
             query: { status: { $in: ["ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"] } },
         },
         rejected: { query: { status: "payment_not_received" } },
-        all: { query: {} },
     },
     dispatch: {
-        to_dispatch: { query: { status: "ready_for_dispatch" }, work: true },
-        on_hold: { query: { status: "pending" }, work: true },
+        to_dispatch: { query: { status: "ready_for_dispatch" } },
+        on_hold: { query: { status: "pending" } },
         sent_for_approval: { query: { status: "pending_admin_approval" } },
         // Accounts approval clears rejectionReason, so a reason here comes from the admin
         rejected_by_admin: { query: { status: { $in: ["ready_for_dispatch", "pending"] }, rejectionReason: { $nin: [null, ""] } } },
         cancelled: { query: { status: "cancelled" } },
-        all: { query: { status: { $in: ["ready_for_dispatch", "pending", "pending_admin_approval", "completed", "cancelled"] } } },
     },
     // Orders waiting for admin approval are handled in the combined All Approvals screen
     admin: {
@@ -332,10 +328,9 @@ const getAppOrders = (role, filter, page, limit, month, search) => __awaiter(voi
         conditions.push({ $or: [{ orderId: pattern }, { piNumber: pattern }, { partyName: pattern }] });
     }
     const query = { $and: conditions };
-    const sort = selected.work ? { createdAt: 1 } : { updatedAt: -1 };
     const [orders, total] = yield Promise.all([
         order_1.default.find(query)
-            .sort(sort)
+            .sort({ updatedAt: -1 }) // newest first
             .skip((page - 1) * limit)
             .limit(limit)
             .populate("submittedBy", "name email"),

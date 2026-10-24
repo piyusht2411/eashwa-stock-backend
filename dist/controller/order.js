@@ -559,6 +559,7 @@ const getAppOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         const limit = isExport ? 5000 : Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
         const month = /^\d{4}-\d{2}$/.test(req.query.month || "") ? req.query.month : undefined;
         const search = (req.query.search || "").trim() || undefined;
+        // requireAppRole above only lets order roles through
         const result = yield orderService.getAppOrders(auth.appRole, filter, page, limit, month, search);
         res.status(200).json(Object.assign({ success: true }, result));
     }

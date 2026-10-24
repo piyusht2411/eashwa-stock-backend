@@ -69,16 +69,15 @@ const getApprovals = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 ],
             });
         }
-        // Waiting items show the oldest first; decided items show the latest first
-        const direction = filter === "to_approve" ? 1 : -1;
+        // Newest first, so the item a notification was just sent for is at the top
         const take = page * limit; // enough from each side to fill the requested page after merging
         const [orders, tickets, orderTotal, ticketTotal] = yield Promise.all([
             order_1.default.find({ $and: orderQuery })
-                .sort({ updatedAt: direction })
+                .sort({ updatedAt: -1 })
                 .limit(take)
                 .populate("submittedBy", "name email"),
             ticket_1.default.find({ $and: ticketQuery })
-                .sort({ updatedAt: direction })
+                .sort({ updatedAt: -1 })
                 .limit(take)
                 .populate("submittedBy", "name email")
                 .populate("dealer", "name phone location"),
@@ -90,7 +89,7 @@ const getApprovals = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             ...orders.map((o) => ({ kind: "order", approvalStatus, sortDate: o.get("updatedAt"), data: o })),
             ...tickets.map((t) => ({ kind: "ticket", approvalStatus, sortDate: t.get("updatedAt"), data: t })),
         ]
-            .sort((a, b) => direction * (new Date(a.sortDate).getTime() - new Date(b.sortDate).getTime()))
+            .sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())
             .slice((page - 1) * limit, page * limit);
         const total = orderTotal + ticketTotal;
         const totalPages = Math.ceil(total / limit);

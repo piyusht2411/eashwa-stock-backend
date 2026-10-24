@@ -62,7 +62,7 @@ export const getAllTicketsService = async (filters: any) => {
 
   const [tickets, total] = await Promise.all([
     Ticket.find(query)
-      .sort({ complainDate: -1 })
+      .sort({ updatedAt: -1 }) // newest first, incl. tickets reopened after an admin rejection
       .skip(skip)
       .limit(limit)
       .populate("submittedBy", "name email")
