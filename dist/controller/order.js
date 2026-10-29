@@ -578,9 +578,9 @@ const getAppOrderById = (req, res) => __awaiter(void 0, void 0, void 0, function
             res.status(404).json({ success: false, message: "Order not found." });
             return;
         }
-        // Guards only see orders approved or rejected by admin
+        // Guards only see orders listed in their All tab
         if (auth.appRole === "guard" && !(yield orderService.canGuardSeeOrder(req.params.id))) {
-            res.status(403).json({ success: false, message: "This order has not been reviewed by admin yet." });
+            res.status(403).json({ success: false, message: "You are not allowed to view this order." });
             return;
         }
         res.status(200).json({ success: true, data: order });

@@ -312,7 +312,13 @@ exports.APP_ORDER_FILTERS = {
         approved: { query: { status: "completed" } },
     },
 };
-const canGuardSeeOrder = (id) => __awaiter(void 0, void 0, void 0, function* () { return !!(yield order_1.default.exists(Object.assign({ _id: id }, exports.APP_ORDER_FILTERS.guard.approved.query))); });
+// Guards see approved orders plus the in-progress ones listed in their All tab
+const canGuardSeeOrder = (id) => __awaiter(void 0, void 0, void 0, function* () {
+    return !!(yield order_1.default.exists({
+        _id: id,
+        status: { $in: ["completed", "pending_admin_approval", "ready_for_dispatch", "pending_verification", "pending"] },
+    }));
+});
 exports.canGuardSeeOrder = canGuardSeeOrder;
 const getAppOrders = (role, filter, page, limit, month, search) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;

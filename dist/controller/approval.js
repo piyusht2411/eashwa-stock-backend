@@ -18,20 +18,33 @@ const ticket_1 = __importDefault(require("../model/ticket"));
 const user_1 = __importDefault(require("../model/user"));
 const appRoles_1 = require("../config/appRoles");
 const orderService_1 = require("../services/orderService");
+const ROLE_FILTERS = {
+    admin: ["to_approve", "approved", "rejected"],
+    guard: ["approved", "to_approve", "ready_for_dispatch", "pending"],
+};
+// null = that side has nothing for this filter (tickets are never ready for dispatch)
 const ORDER_QUERIES = {
     to_approve: { status: "pending_admin_approval" },
     approved: { status: "completed" },
     rejected: orderService_1.ADMIN_REJECTED_NOW,
+    // Waiting on payment verification or on hold with dispatch
+    pending: { status: { $in: ["pending_verification", "pending"] } },
+    ready_for_dispatch: { status: "ready_for_dispatch" },
 };
 const TICKET_QUERIES = {
     to_approve: { approvalStatus: "pending" },
     approved: { approvalStatus: "approved" },
     rejected: { approvalStatus: "rejected" },
+    pending: { status: "Pending" },
+    ready_for_dispatch: null,
 };
+// Approval strip shown on the cards; null = cards show their own status badge instead
 const APPROVAL_STATUS = {
     to_approve: "pending",
     approved: "approved",
     rejected: "rejected",
+    pending: null,
+    ready_for_dispatch: null,
 };
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const getApprovals = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -42,14 +55,15 @@ const getApprovals = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             res.status(403).json({ success: false, message: "You are not allowed to view approvals." });
             return;
         }
-        // Guards only see approved entries
+        const allowed = ROLE_FILTERS[appRole];
         const requested = req.query.filter;
-        const filter = appRole === "guard" ? "approved" : requested in ORDER_QUERIES ? requested : "to_approve";
+        const filter = allowed.includes(requested) ? requested : allowed[0];
         const isExport = req.query.export === "true";
         const page = isExport ? 1 : Math.max(1, parseInt(req.query.page) || 1);
         const limit = isExport ? 5000 : Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
         const orderQuery = [ORDER_QUERIES[filter]];
         const ticketQuery = [TICKET_QUERIES[filter]];
+        const includeTickets = TICKET_QUERIES[filter] !== null;
         const month = req.query.month;
         if (/^\d{4}-\d{2}$/.test(month || "")) {
             const [year, monthNum] = month.split("-").map(Number);
@@ -76,13 +90,15 @@ const getApprovals = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 .sort({ updatedAt: -1 })
                 .limit(take)
                 .populate("submittedBy", "name email"),
-            ticket_1.default.find({ $and: ticketQuery })
-                .sort({ updatedAt: -1 })
-                .limit(take)
-                .populate("submittedBy", "name email")
-                .populate("dealer", "name phone location"),
+            includeTickets
+                ? ticket_1.default.find({ $and: ticketQuery })
+                    .sort({ updatedAt: -1 })
+                    .limit(take)
+                    .populate("submittedBy", "name email")
+                    .populate("dealer", "name phone location")
+                : [],
             order_1.default.countDocuments({ $and: orderQuery }),
-            ticket_1.default.countDocuments({ $and: ticketQuery }),
+            includeTickets ? ticket_1.default.countDocuments({ $and: ticketQuery }) : 0,
         ]);
         const approvalStatus = APPROVAL_STATUS[filter];
         const items = [

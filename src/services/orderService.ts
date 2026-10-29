@@ -368,7 +368,12 @@ export const APP_ORDER_FILTERS: Record<OrderAppRole, Record<string, { query: any
   },
 };
 
-export const canGuardSeeOrder = async (id: string) => !!(await Order.exists({ _id: id, ...APP_ORDER_FILTERS.guard.approved.query }));
+// Guards see approved orders plus the in-progress ones listed in their All tab
+export const canGuardSeeOrder = async (id: string) =>
+  !!(await Order.exists({
+    _id: id,
+    status: { $in: ["completed", "pending_admin_approval", "ready_for_dispatch", "pending_verification", "pending"] },
+  }));
 
 export const getAppOrders = async (
   role: OrderAppRole,

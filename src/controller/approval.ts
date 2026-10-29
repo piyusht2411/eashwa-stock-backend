@@ -5,26 +5,41 @@ import User from "../model/user";
 import { getAppRole } from "../config/appRoles";
 import { ADMIN_REJECTED_NOW } from "../services/orderService";
 
-// Combined admin approval list across Orders and Tickets. Both keep their own collections and
-// workflows; this only maps each one's admin decision onto To Approve / Approved / Rejected.
-type ApprovalFilter = "to_approve" | "approved" | "rejected";
+// Combined list across Orders and Tickets. Both keep their own collections and workflows;
+// admin filters map each one's admin decision onto To Approve / Approved / Rejected, and guards
+// also get read-only views of work still in progress.
+type ApprovalFilter = "to_approve" | "approved" | "rejected" | "pending" | "ready_for_dispatch";
 
+const ROLE_FILTERS: Record<"admin" | "guard", ApprovalFilter[]> = {
+  admin: ["to_approve", "approved", "rejected"],
+  guard: ["approved", "to_approve", "ready_for_dispatch", "pending"],
+};
+
+// null = that side has nothing for this filter (tickets are never ready for dispatch)
 const ORDER_QUERIES: Record<ApprovalFilter, any> = {
   to_approve: { status: "pending_admin_approval" },
   approved: { status: "completed" },
   rejected: ADMIN_REJECTED_NOW,
+  // Waiting on payment verification or on hold with dispatch
+  pending: { status: { $in: ["pending_verification", "pending"] } },
+  ready_for_dispatch: { status: "ready_for_dispatch" },
 };
 
 const TICKET_QUERIES: Record<ApprovalFilter, any> = {
   to_approve: { approvalStatus: "pending" },
   approved: { approvalStatus: "approved" },
   rejected: { approvalStatus: "rejected" },
+  pending: { status: "Pending" },
+  ready_for_dispatch: null,
 };
 
-const APPROVAL_STATUS: Record<ApprovalFilter, "pending" | "approved" | "rejected"> = {
+// Approval strip shown on the cards; null = cards show their own status badge instead
+const APPROVAL_STATUS: Record<ApprovalFilter, "pending" | "approved" | "rejected" | null> = {
   to_approve: "pending",
   approved: "approved",
   rejected: "rejected",
+  pending: null,
+  ready_for_dispatch: null,
 };
 
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -38,10 +53,9 @@ export const getApprovals = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    // Guards only see approved entries
+    const allowed = ROLE_FILTERS[appRole];
     const requested = req.query.filter as ApprovalFilter;
-    const filter: ApprovalFilter =
-      appRole === "guard" ? "approved" : requested in ORDER_QUERIES ? requested : "to_approve";
+    const filter: ApprovalFilter = allowed.includes(requested) ? requested : allowed[0];
 
     const isExport = req.query.export === "true";
     const page = isExport ? 1 : Math.max(1, parseInt(req.query.page as string) || 1);
@@ -49,6 +63,7 @@ export const getApprovals = async (req: Request, res: Response): Promise<void> =
 
     const orderQuery: any[] = [ORDER_QUERIES[filter]];
     const ticketQuery: any[] = [TICKET_QUERIES[filter]];
+    const includeTickets = TICKET_QUERIES[filter] !== null;
 
     const month = req.query.month as string;
     if (/^\d{4}-\d{2}$/.test(month || "")) {
@@ -79,13 +94,15 @@ export const getApprovals = async (req: Request, res: Response): Promise<void> =
         .sort({ updatedAt: -1 })
         .limit(take)
         .populate("submittedBy", "name email"),
-      Ticket.find({ $and: ticketQuery })
-        .sort({ updatedAt: -1 })
-        .limit(take)
-        .populate("submittedBy", "name email")
-        .populate("dealer", "name phone location"),
+      includeTickets
+        ? Ticket.find({ $and: ticketQuery })
+            .sort({ updatedAt: -1 })
+            .limit(take)
+            .populate("submittedBy", "name email")
+            .populate("dealer", "name phone location")
+        : [],
       Order.countDocuments({ $and: orderQuery }),
-      Ticket.countDocuments({ $and: ticketQuery }),
+      includeTickets ? Ticket.countDocuments({ $and: ticketQuery }) : 0,
     ]);
 
     const approvalStatus = APPROVAL_STATUS[filter];
